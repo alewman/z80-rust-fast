@@ -29,8 +29,9 @@ pub enum Fault {
     /// handle. Unreachable in practice: runs of DD/FD and DD/FD before ED are
     /// consumed before the table, and the table covers every other byte.
     UnhandledIndexOpcode { prefix: u8, opcode: u8, pc: u16 },
-    /// An unprefixed opcode the main dispatcher does not handle. Unreachable
-    /// in practice: every one of the 256 is handled.
+    /// An unprefixed opcode the main dispatcher does not handle. Never
+    /// constructed: the dispatch `match` is exhaustive over all 256 bytes.
+    /// Kept because it is part of the public API inherited from z80-rust.
     UnhandledOpcode { opcode: u8, pc: u16 },
     /// IM 0 acceptance with a device byte that is not an RST opcode. The
     /// request stays pending.

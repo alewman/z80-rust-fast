@@ -1,7 +1,9 @@
 //! Top-level, base, CB, and ED opcode dispatch.
 //!
-//! Transcribed from `z80_python/_dispatch.py`. The explicit if-chain shape is
-//! deliberate and mirrors the reference: every opcode is one grep away.
+//! Transcribed from `z80_python/_dispatch.py`, then reshaped: the reference
+//! dispatches with an if-chain so every opcode is one grep away; here each
+//! level is one exhaustive `match`, which keeps that property (every opcode
+//! byte is named) and compiles to a jump table.
 
 use crate::core::{Bus, Fault, Z80};
 
@@ -13,203 +15,96 @@ impl<B: Bus> Z80<B> {
     pub fn decode_and_execute(&mut self) -> Result<u32, Fault> {
         self.fetched.clear();
         let opcode = self.fetch_byte();
-        if opcode == 0xCB {
-            let sub_opcode = self.fetch_byte();
-            return Ok(self.execute_cb(sub_opcode));
-        }
-        if opcode == 0xED {
-            let sub_opcode = self.fetch_byte();
-            return Ok(self.execute_ed(sub_opcode));
-        }
-        if matches!(opcode, 0xDD | 0xFD) {
-            let sub_opcode = self.fetch_byte();
-            return self.execute_index(opcode, sub_opcode);
-        }
         self.execute_main(opcode)
     }
 
     pub(crate) fn execute_cb(&mut self, sub_opcode: u8) -> u32 {
-        if sub_opcode <= 0x3F {
-            return self.op_rot(sub_opcode);
+        match sub_opcode {
+            0x00..=0x3F => self.op_rot(sub_opcode),
+            0x40..=0x7F => self.op_bit(sub_opcode),
+            0x80..=0xBF => self.op_res(sub_opcode),
+            0xC0..=0xFF => self.op_set(sub_opcode),
         }
-        if sub_opcode <= 0x7F {
-            return self.op_bit(sub_opcode);
-        }
-        if sub_opcode <= 0xBF {
-            return self.op_res(sub_opcode);
-        }
-        self.op_set(sub_opcode)
     }
 
+    /// Dispatch one fetched opcode byte, prefixes included.
+    ///
+    /// One exhaustive `match` over all 256 values, so the compiler emits a
+    /// jump table instead of the reference's if-chain (which tested up to
+    /// forty conditions per instruction). Every arm calls the same handler
+    /// with the same argument the if-chain did; the prefix arms are the
+    /// tests `decode_and_execute` used to make first. No `_` arm: adding an
+    /// opcode anywhere is a compile error until it is routed.
     pub(crate) fn execute_main(&mut self, opcode: u8) -> Result<u32, Fault> {
-        if opcode == 0x00 {
-            return Ok(self.op_nop());
-        }
-        if matches!(opcode, 0x01 | 0x11 | 0x21 | 0x31) {
-            return Ok(self.op_ld_rr_nn(opcode));
-        }
-        if opcode == 0x08 {
-            return Ok(self.op_ex_af_af());
-        }
-        if opcode == 0x10 {
-            return Ok(self.op_djnz());
-        }
-        if opcode == 0x76 {
-            return Ok(self.op_halt());
-        }
-        if (0x40..=0x7F).contains(&opcode) && opcode != 0x76 {
-            return Ok(self.op_ld_r_r(opcode));
-        }
-        if matches!(
-            opcode,
-            0x06 | 0x0E | 0x16 | 0x1E | 0x26 | 0x2E | 0x36 | 0x3E
-        ) {
-            return Ok(self.op_ld_r_n(opcode));
-        }
-        if matches!(opcode, 0x0A | 0x1A) {
-            let reg16 = if opcode == 0x0A { self.bc() } else { self.de() };
-            return Ok(self.op_ld_a_irr(reg16));
-        }
-        if matches!(opcode, 0x02 | 0x12) {
-            let reg16 = if opcode == 0x02 { self.bc() } else { self.de() };
-            return Ok(self.op_ld_irr_a(reg16));
-        }
-        if opcode == 0x3A {
-            return Ok(self.op_ld_a_inn());
-        }
-        if opcode == 0x32 {
-            return Ok(self.op_ld_inn_a());
-        }
-        if matches!(opcode, 0x37 | 0x3F) {
-            return Ok(self.op_scf_ccf(opcode, false));
-        }
-        if opcode == 0x22 {
-            return Ok(self.op_ld_nn_hl());
-        }
-        if opcode == 0x2A {
-            return Ok(self.op_ld_hl_nn_from_mem());
-        }
-        if opcode == 0xDB {
-            return Ok(self.op_in_a_n());
-        }
-        if opcode == 0xD3 {
-            return Ok(self.op_out_n_a());
-        }
-        if (0x80..=0xBF).contains(&opcode) {
-            return Ok(self.op_alu_r(opcode));
-        }
-        if matches!(
-            opcode,
-            0xC6 | 0xCE | 0xD6 | 0xDE | 0xE6 | 0xEE | 0xF6 | 0xFE
-        ) {
-            return Ok(self.op_alu_n(opcode));
-        }
-        if matches!(opcode, 0x04 | 0x0C | 0x14 | 0x1C | 0x24 | 0x2C | 0x3C) {
-            return Ok(self.op_inc_r(opcode));
-        }
-        if matches!(opcode, 0x05 | 0x0D | 0x15 | 0x1D | 0x25 | 0x2D | 0x3D) {
-            return Ok(self.op_dec_r(opcode));
-        }
-        if opcode == 0x34 {
-            return Ok(self.op_inc_hl());
-        }
-        if opcode == 0x35 {
-            return Ok(self.op_dec_hl());
-        }
-        if opcode == 0x27 {
-            return Ok(self.op_daa());
-        }
-        if opcode == 0x2F {
-            return Ok(self.op_cpl());
-        }
-        if opcode == 0x07 {
-            return Ok(self.op_rlca());
-        }
-        if opcode == 0x0F {
-            return Ok(self.op_rrca());
-        }
-        if opcode == 0x17 {
-            return Ok(self.op_rla());
-        }
-        if opcode == 0x1F {
-            return Ok(self.op_rra());
-        }
-        if matches!(opcode, 0x09 | 0x19 | 0x29 | 0x39) {
-            return Ok(self.op_add_hl_rr(opcode));
-        }
-        if matches!(opcode, 0x03 | 0x13 | 0x23 | 0x33) {
-            return Ok(self.op_inc_rr(opcode));
-        }
-        if matches!(opcode, 0x0B | 0x1B | 0x2B | 0x3B) {
-            return Ok(self.op_dec_rr(opcode));
-        }
-        if matches!(opcode, 0x18 | 0x20 | 0x28 | 0x30 | 0x38) {
-            return Ok(self.op_jr(opcode));
-        }
-        if matches!(
-            opcode,
-            0xC0 | 0xC8 | 0xD0 | 0xD8 | 0xE0 | 0xE8 | 0xF0 | 0xF8
-        ) {
-            return Ok(self.op_ret_cc(opcode));
-        }
-        if opcode == 0xC9 {
-            return Ok(self.op_ret());
-        }
-        if matches!(
-            opcode,
-            0xC2 | 0xCA | 0xD2 | 0xDA | 0xE2 | 0xEA | 0xF2 | 0xFA | 0xC3
-        ) {
-            return Ok(self.op_jp(opcode));
-        }
-        if matches!(
-            opcode,
-            0xC4 | 0xCC | 0xD4 | 0xDC | 0xE4 | 0xEC | 0xF4 | 0xFC | 0xCD
-        ) {
-            return Ok(self.op_call(opcode));
-        }
-        if matches!(
-            opcode,
-            0xC7 | 0xCF | 0xD7 | 0xDF | 0xE7 | 0xEF | 0xF7 | 0xFF
-        ) {
-            return Ok(self.op_rst(opcode));
-        }
-        if matches!(opcode, 0xC1 | 0xD1 | 0xE1) {
-            return Ok(self.op_pop_rr(opcode));
-        }
-        if matches!(opcode, 0xC5 | 0xD5 | 0xE5) {
-            return Ok(self.op_push_rr(opcode));
-        }
-        if opcode == 0xF1 {
-            return Ok(self.op_pop_af());
-        }
-        if opcode == 0xF5 {
-            return Ok(self.op_push_af());
-        }
-        if opcode == 0xF9 {
-            return Ok(self.op_ld_sp_hl());
-        }
-        if opcode == 0xD9 {
-            return Ok(self.op_exx());
-        }
-        if opcode == 0xE3 {
-            return Ok(self.op_ex_sp_hl());
-        }
-        if opcode == 0xE9 {
-            return Ok(self.op_jp_hl());
-        }
-        if opcode == 0xEB {
-            return Ok(self.op_ex_de_hl());
-        }
-        if opcode == 0xF3 {
-            return Ok(self.op_interrupt_enable(false));
-        }
-        if opcode == 0xFB {
-            return Ok(self.op_interrupt_enable(true));
-        }
-        Err(Fault::UnhandledOpcode {
-            opcode,
-            pc: self.pc.wrapping_sub(1),
-        })
+        let t_states = match opcode {
+            // Prefixes.
+            0xCB => {
+                let sub_opcode = self.fetch_byte();
+                self.execute_cb(sub_opcode)
+            }
+            0xED => {
+                let sub_opcode = self.fetch_byte();
+                self.execute_ed(sub_opcode)
+            }
+            0xDD | 0xFD => {
+                let sub_opcode = self.fetch_byte();
+                return self.execute_index(opcode, sub_opcode);
+            }
+
+            0x00 => self.op_nop(),
+            0x01 | 0x11 | 0x21 | 0x31 => self.op_ld_rr_nn(opcode),
+            0x02 => self.op_ld_irr_a(self.bc()),
+            0x12 => self.op_ld_irr_a(self.de()),
+            0x03 | 0x13 | 0x23 | 0x33 => self.op_inc_rr(opcode),
+            0x04 | 0x0C | 0x14 | 0x1C | 0x24 | 0x2C | 0x3C => self.op_inc_r(opcode),
+            0x05 | 0x0D | 0x15 | 0x1D | 0x25 | 0x2D | 0x3D => self.op_dec_r(opcode),
+            0x06 | 0x0E | 0x16 | 0x1E | 0x26 | 0x2E | 0x36 | 0x3E => self.op_ld_r_n(opcode),
+            0x07 => self.op_rlca(),
+            0x08 => self.op_ex_af_af(),
+            0x09 | 0x19 | 0x29 | 0x39 => self.op_add_hl_rr(opcode),
+            0x0A => self.op_ld_a_irr(self.bc()),
+            0x1A => self.op_ld_a_irr(self.de()),
+            0x0B | 0x1B | 0x2B | 0x3B => self.op_dec_rr(opcode),
+            0x0F => self.op_rrca(),
+            0x10 => self.op_djnz(),
+            0x17 => self.op_rla(),
+            0x18 | 0x20 | 0x28 | 0x30 | 0x38 => self.op_jr(opcode),
+            0x1F => self.op_rra(),
+            0x22 => self.op_ld_nn_hl(),
+            0x27 => self.op_daa(),
+            0x2A => self.op_ld_hl_nn_from_mem(),
+            0x2F => self.op_cpl(),
+            0x32 => self.op_ld_inn_a(),
+            0x34 => self.op_inc_hl(),
+            0x35 => self.op_dec_hl(),
+            0x37 | 0x3F => self.op_scf_ccf(opcode, false),
+            0x3A => self.op_ld_a_inn(),
+
+            0x76 => self.op_halt(),
+            0x40..=0x75 | 0x77..=0x7F => self.op_ld_r_r(opcode),
+            0x80..=0xBF => self.op_alu_r(opcode),
+
+            0xC0 | 0xC8 | 0xD0 | 0xD8 | 0xE0 | 0xE8 | 0xF0 | 0xF8 => self.op_ret_cc(opcode),
+            0xC1 | 0xD1 | 0xE1 => self.op_pop_rr(opcode),
+            0xC2 | 0xCA | 0xD2 | 0xDA | 0xE2 | 0xEA | 0xF2 | 0xFA | 0xC3 => self.op_jp(opcode),
+            0xC4 | 0xCC | 0xD4 | 0xDC | 0xE4 | 0xEC | 0xF4 | 0xFC | 0xCD => self.op_call(opcode),
+            0xC5 | 0xD5 | 0xE5 => self.op_push_rr(opcode),
+            0xC6 | 0xCE | 0xD6 | 0xDE | 0xE6 | 0xEE | 0xF6 | 0xFE => self.op_alu_n(opcode),
+            0xC7 | 0xCF | 0xD7 | 0xDF | 0xE7 | 0xEF | 0xF7 | 0xFF => self.op_rst(opcode),
+            0xC9 => self.op_ret(),
+            0xD3 => self.op_out_n_a(),
+            0xD9 => self.op_exx(),
+            0xDB => self.op_in_a_n(),
+            0xE3 => self.op_ex_sp_hl(),
+            0xE9 => self.op_jp_hl(),
+            0xEB => self.op_ex_de_hl(),
+            0xF1 => self.op_pop_af(),
+            0xF3 => self.op_interrupt_enable(false),
+            0xF5 => self.op_push_af(),
+            0xF9 => self.op_ld_sp_hl(),
+            0xFB => self.op_interrupt_enable(true),
+        };
+        Ok(t_states)
     }
 
     pub(crate) fn execute_ed(&mut self, opcode: u8) -> u32 {
