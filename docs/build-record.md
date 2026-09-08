@@ -82,7 +82,10 @@ transcription this repository forks has its own record in
   a sweep taken while builds and the rung 3 jobs ran read 20-26 s and was
   discarded; the recorded numbers were taken with the PyPy jobs paused
   (`SIGSTOP`) and nothing else running.
+- **09:05, published.** On the user's word the private repository
+  `alewman/z80-rust-fast` was created and `main` pushed at 2fb7c98. The
+  first CI run passed all four jobs (fmt/clippy/test with the no_std
+  build, rung 1 with rung 5, rung 2, rung 6) on the first try.
 - **Open when this record was written:** rung 3 on 2a5eac5 (see the
-  README ladder table), the GitHub repository (not created; the user
-  asked for push on request), and the wasm project, which is next and
-  not started.
+  README ladder table) and the wasm project, which is next and not
+  started.
