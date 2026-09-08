@@ -5,91 +5,66 @@
 #![allow(clippy::manual_rotate)]
 
 use crate::core::{Bus, Z80};
+use crate::flags::{Flags, FLAG_C, SZP};
 
 impl<B: Bus> Z80<B> {
+    // The CB rotates and shifts write all eight flags: C is the bit shifted
+    // out, N = H = 0, PV = parity of the result, S/Z/X/Y from the result.
+    fn rot_flags(&mut self, result: u8, carry: u8) {
+        self.f = Flags::new(SZP[usize::from(result)] | (carry & FLAG_C));
+    }
+
     pub(crate) fn rlc(&mut self, x: u8) -> u8 {
         let x = (x << 1) | (x >> 7);
-        self.f.set_c(x & 1);
-        self.f.set_n(0);
-        self.f.set_h(0);
-        self.set_parity(x);
-        self.set_xysz(x);
+        self.rot_flags(x, x & 1);
         x
     }
 
     pub(crate) fn rrc(&mut self, x: u8) -> u8 {
         let x = (x >> 1) | (x << 7);
-        self.f.set_c((x >> 7) & 1);
-        self.f.set_n(0);
-        self.f.set_h(0);
-        self.set_parity(x);
-        self.set_xysz(x);
+        self.rot_flags(x, (x >> 7) & 1);
         x
     }
 
     pub(crate) fn rl(&mut self, x: u8) -> u8 {
         let carry = (x >> 7) & 1;
         let x = (x << 1) | self.f.c();
-        self.f.set_c(carry);
-        self.f.set_n(0);
-        self.f.set_h(0);
-        self.set_parity(x);
-        self.set_xysz(x);
+        self.rot_flags(x, carry);
         x
     }
 
     pub(crate) fn rr(&mut self, x: u8) -> u8 {
         let carry = x & 1;
         let x = (x >> 1) | (self.f.c() << 7);
-        self.f.set_c(carry);
-        self.f.set_n(0);
-        self.f.set_h(0);
-        self.set_parity(x);
-        self.set_xysz(x);
+        self.rot_flags(x, carry);
         x
     }
 
     pub(crate) fn sla(&mut self, x: u8) -> u8 {
         let carry = (x >> 7) & 1;
         let x = x << 1;
-        self.f.set_c(carry);
-        self.f.set_n(0);
-        self.f.set_h(0);
-        self.set_parity(x);
-        self.set_xysz(x);
+        self.rot_flags(x, carry);
         x
     }
 
     pub(crate) fn sra(&mut self, x: u8) -> u8 {
         let carry = x & 1;
         let x = (x & 0x80) | (x >> 1);
-        self.f.set_c(carry);
-        self.f.set_n(0);
-        self.f.set_h(0);
-        self.set_parity(x);
-        self.set_xysz(x);
+        self.rot_flags(x, carry);
         x
     }
 
     pub(crate) fn sll(&mut self, x: u8) -> u8 {
         let carry = (x >> 7) & 1;
         let x = (x << 1) | 1;
-        self.f.set_c(carry);
-        self.f.set_n(0);
-        self.f.set_h(0);
-        self.set_parity(x);
-        self.set_xysz(x);
+        self.rot_flags(x, carry);
         x
     }
 
     pub(crate) fn srl(&mut self, x: u8) -> u8 {
         let carry = x & 1;
         let x = x >> 1;
-        self.f.set_c(carry);
-        self.f.set_n(0);
-        self.f.set_h(0);
-        self.set_parity(x);
-        self.set_xysz(x);
+        self.rot_flags(x, carry);
         x
     }
 
