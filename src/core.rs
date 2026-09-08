@@ -106,11 +106,19 @@ pub struct Z80<B: Bus> {
     pub(crate) int_vector: u8,
     /// Not processor state: the bytes the current instruction has consumed
     /// from PC (opcode, prefixes, operands), so a trace can report exactly
-    /// the bytes the instruction occupied without a disassembler. A run of
-    /// DD/FD prefixes has no length bound, so this is a vector; it is
-    /// cleared, not reallocated, per instruction.
-    pub(crate) fetched: Vec<u8>,
+    /// the bytes the instruction occupied without a disassembler. Every
+    /// instruction but a run of DD/FD prefixes fits `fetched_inline`; the
+    /// run has no length bound, so past `FETCHED_INLINE` bytes the whole
+    /// sequence is kept in `fetched_spill` instead. Only `fetched_len` is
+    /// touched per instruction.
+    pub(crate) fetched_len: usize,
+    pub(crate) fetched_inline: [u8; FETCHED_INLINE],
+    pub(crate) fetched_spill: Vec<u8>,
 }
+
+/// Longest instruction that stays inline: DD CB d op is four bytes, so
+/// eight covers every non-run instruction with room to spare.
+pub(crate) const FETCHED_INLINE: usize = 8;
 
 impl<B: Bus> Z80<B> {
     pub fn new(bus: B) -> Self {
@@ -145,17 +153,42 @@ impl<B: Bus> Z80<B> {
             ei_nmi_iff2_erratum: false,
             pending_lines: 0,
             int_vector: 0,
-            fetched: Vec::with_capacity(8),
+            fetched_len: 0,
+            fetched_inline: [0; FETCHED_INLINE],
+            fetched_spill: Vec::new(),
         }
     }
 
     /// The bytes the most recent instruction occupied, in address order.
     pub fn last_instruction_bytes(&self) -> &[u8] {
-        &self.fetched
+        if self.fetched_len <= FETCHED_INLINE {
+            &self.fetched_inline[..self.fetched_len]
+        } else {
+            &self.fetched_spill
+        }
     }
 
+    #[inline(always)]
     pub(crate) fn note_fetched(&mut self, value: u8) {
-        self.fetched.push(value);
+        let len = self.fetched_len;
+        if let Some(slot) = self.fetched_inline.get_mut(len) {
+            *slot = value;
+        } else {
+            self.note_fetched_spill(len, value);
+        }
+        self.fetched_len = len + 1;
+    }
+
+    /// The ninth and later bytes of a DD/FD prefix run: move the inline
+    /// bytes to the spill vector once, then append there.
+    #[cold]
+    #[inline(never)]
+    fn note_fetched_spill(&mut self, len: usize, value: u8) {
+        if len == FETCHED_INLINE {
+            self.fetched_spill.clear();
+            self.fetched_spill.extend_from_slice(&self.fetched_inline);
+        }
+        self.fetched_spill.push(value);
     }
 
     pub(crate) fn inc_r(&mut self) {
