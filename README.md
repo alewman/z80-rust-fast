@@ -95,7 +95,8 @@ noise on one binary is about 0.2%.
 | `d27af51` | Main dispatch: one exhaustive `match` over the opcode byte, prefixes included, instead of the if-chain | 43.0 s | 43.0 s (default; 43.2 nf6, 45.8 nf5) | 134.0 |
 | `5814b1f` | DD/FD dispatch: the same `match` for the byte after the prefix (`bench/ix-loop.json` 3.86 s to 2.99 s) | 43.3 s | 43.0 s (nf5; 43.6 nf6) | 134.1 |
 | `4f0dbe7` | ED dispatch: the same `match` for the byte after ED (`bench/ed-loop.json` 2.27 s to 2.04 s) | 47.1 s | 43.2 s (nf6; 43.6 nf5) | 133.3 |
-| next | Lifecycle requests as one byte: `step()` tests RESET, NMI, INT with one load and takes a cold path only when a line is up | 43.7 s | 40.6 s (nf6; 41.9 nf5) | 141.9 |
+| `a19edfc` | Lifecycle requests as one byte: `step()` tests RESET, NMI, INT with one load and takes a cold path only when a line is up | 43.7 s | 40.6 s (nf6; 41.9 nf5) | 141.9 |
+| next | Fetched bytes in an inline 8-byte buffer; a `Vec` only for prefix runs longer than that | 38.6 s | 38.6 s (default; 40.3 nf6, 41.4 nf5) | 149.2 |
 
 ### Profile of the baseline
 
@@ -164,6 +165,13 @@ re-run clean on each.
    reference's priority order only when something is pending.
    `capture_state`/`restore_state` and the request/clear API translate, so
    the 28 `CpuState` fields are unchanged. 43.2 s to 40.6 s.
+5. **Fetched bytes inline.** Every fetched byte was pushed to a `Vec`
+   (2% in `Vec::push`, plus the `clear` per instruction). The bytes now go
+   to an 8-byte array with a length; only a DD/FD run longer than eight
+   bytes moves to a `Vec`, on a `#[cold]` path. `last_instruction_bytes()`
+   returns the same slice either way, and `tests/fetched_bytes.rs` covers
+   the spill, since no manifest records an instruction longer than five
+   bytes. 40.6 s to 38.6 s.
 
 ## Using the core
 
