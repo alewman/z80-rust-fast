@@ -87,7 +87,12 @@ directions. So `scripts/bench.sh` builds three layouts, the default and
 those two, runs each, and prints the minimum; the minimum over layouts is
 the figure that says whether a change helped, and the default-build figure
 is kept because it is what `cargo build --release` produces. Run-to-run
-noise on one binary is about 0.2%.
+noise on one binary is about 0.2%. Since the alignment commit the default
+build is the 64-byte-aligned layout and the sweep is `default`, `noalign`
+(the flag overridden away, the layout LLVM picks on its own) and `nf5`.
+Measurements taken while rung 3's 22 PyPy processes were running were
+10-30% slower and are not in the table; the rows from `6fb0786` on were
+taken with those processes paused.
 
 | Commit | Change | Default build | Min over layouts | M instructions/s (min) |
 | --- | --- | --- | --- | --- |
@@ -101,7 +106,9 @@ noise on one binary is about 0.2%.
 | `dc1e28b` | `#[inline]` on the conformance host's `Bus` methods and the CP/M trap check, which were real calls from the binaries' crate on every read and every step | 21.3 s | 20.5 s (nf6; 22.3 nf5) | 281.0 |
 | `653281c` | 8-bit ALU and CB rotate flags composed as one byte from a compile-time S/Z/X/Y/parity table instead of five to seven setter calls | 20.0 s | 19.8 s (nf6 19.75, nf5 19.76) | 291.8 |
 | `2a5eac5` | The remaining flag writers the same way: ADC/SBC HL, ADD HL/IX/IY, RLCA/RRCA/RLA/RRA, BIT, IN r,(C), RRD/RLD, LD A,I/R (no measurable ZEXALL change) | 20.5 s | 19.7 s (nf6 19.69, nf5 19.72) | 292.8 |
-| next | Build profile: `lto = "fat"`, `codegen-units = 1` | 17.9 s | 17.0 s (nf6; 17.8 nf5) | 338.8 |
+| `6fb0786` | Build profile: `lto = "fat"`, `codegen-units = 1` | 17.9 s | 17.0 s (nf6; 17.8 nf5) | 338.8 |
+| next | 64-byte branch-target alignment becomes the default build (`.cargo/config.toml`); sweep is now default / noalign / nf5 | 16.8 s | 16.8 s (default; 17.0 nf5, 17.5 noalign) | 343.8 |
+| (optional) | `scripts/pgo.sh`: profile-guided build trained on ZEXALL and the two loops, output under `target/pgo-use/` | 15.1 s | 15.1 s (one layout) | 382.8 |
 
 ### Profile of the baseline
 
@@ -224,6 +231,25 @@ re-run clean on each.
 11. **Fat LTO and one codegen unit.** The first build-profile change, after
     the source-level work so each earlier number stands on the default
     profile. 19.7 s to 17.0 s.
+12. **64-byte branch-target alignment as the default build.**
+    `.cargo/config.toml` now sets `-C llvm-args=-align-all-nofallthru-blocks=6`,
+    the layout that was best or equal-best on every commit above, so
+    `cargo build --release` gives the measured layout rather than a lucky or
+    unlucky one. Code size grows about 6%. `scripts/bench.sh` now sweeps
+    `default` (aligned), `noalign` (the flag overridden away) and `nf5`.
+    Quiet measurement (rung 3's PyPy processes paused, nothing else
+    running): aligned default 16.8 s, `noalign` 17.5 s, `nf5` 17.0 s.
+13. **`target-cpu=native` was not adopted.** On a 1,500,000,000-instruction
+    slice with LTO: 8% slower than the default without alignment, 2% faster
+    with it, i.e. inside the layout noise, and it would make the binaries
+    non-portable. Not used.
+14. **Profile-guided optimization, as an optional build.** `scripts/pgo.sh`
+    instruments, trains on ZEXALL and the two secondary loops, merges the
+    profile with the toolchain's `llvm-profdata`, and rebuilds into
+    `target/pgo-use/`. Same quiet conditions: **15.1 s** (15.06, 15.11), 382 M
+    instructions/s, a 3.1 GHz Z80; `ix-loop` 1.53 s to 0.98 s, `ed-loop`
+    1.21 s to 0.86 s. The default build does not use it, because
+    a committed profile is tied to one compiler version.
 
 ## Using the core
 
