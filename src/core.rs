@@ -59,6 +59,13 @@ impl core::fmt::Display for Fault {
 #[cfg(feature = "std")]
 impl std::error::Error for Fault {}
 
+/// RESET is asserted (bit of `pending_lines`).
+pub(crate) const LINE_RESET: u8 = 0b001;
+/// An NMI is latched.
+pub(crate) const LINE_NMI: u8 = 0b010;
+/// A maskable interrupt is requested and not yet accepted.
+pub(crate) const LINE_INT: u8 = 0b100;
+
 /// Z80 instruction core with memory and I/O supplied by the host `B`.
 ///
 /// A newly constructed CPU has zeroed processor state, exactly like
@@ -92,9 +99,11 @@ pub struct Z80<B: Bus> {
     pub halted: bool,
     pub(crate) ei_delay: u8,
     pub ei_nmi_iff2_erratum: bool,
-    pub(crate) reset_pending: bool,
-    pub(crate) pending_maskable_interrupt: Option<u8>,
-    pub(crate) non_maskable_interrupt_pending: bool,
+    /// The host's lifecycle request lines, one bit each ([`LINE_RESET`],
+    /// [`LINE_NMI`], [`LINE_INT`]), so `step()` tests all three with one
+    /// load; `int_vector` is the byte the device supplied with INT.
+    pub(crate) pending_lines: u8,
+    pub(crate) int_vector: u8,
     /// Not processor state: the bytes the current instruction has consumed
     /// from PC (opcode, prefixes, operands), so a trace can report exactly
     /// the bytes the instruction occupied without a disassembler. A run of
@@ -134,9 +143,8 @@ impl<B: Bus> Z80<B> {
             halted: false,
             ei_delay: 0,
             ei_nmi_iff2_erratum: false,
-            reset_pending: false,
-            pending_maskable_interrupt: None,
-            non_maskable_interrupt_pending: false,
+            pending_lines: 0,
+            int_vector: 0,
             fetched: Vec::with_capacity(8),
         }
     }
@@ -203,12 +211,34 @@ impl<B: Bus> Z80<B> {
     }
 
     pub(crate) fn can_accept_maskable_interrupt(&self) -> bool {
-        self.iff1 && self.ei_delay == 0 && self.pending_maskable_interrupt.is_some()
+        self.iff1 && self.ei_delay == 0 && (self.pending_lines & LINE_INT) != 0
+    }
+
+    /// Service whichever lifecycle request `step()` must take first, in the
+    /// reference's priority order: RESET, then NMI, then an acceptable
+    /// maskable interrupt. `None` when a request is pending but not
+    /// serviceable (INT with interrupts disabled), so the instruction runs.
+    #[cold]
+    #[inline(never)]
+    pub(crate) fn service_pending_lines(&mut self) -> Result<Option<u32>, Fault> {
+        if self.pending_lines & LINE_RESET != 0 {
+            return Ok(Some(self.accept_reset()));
+        }
+        if self.pending_lines & LINE_NMI != 0 {
+            return Ok(Some(self.accept_non_maskable_interrupt()));
+        }
+        if self.can_accept_maskable_interrupt() {
+            return self.accept_maskable_interrupt().map(Some);
+        }
+        Ok(None)
     }
 
     /// Apply the RESET-visible CPU state while the host holds RESET asserted.
     pub(crate) fn accept_reset(&mut self) -> u32 {
-        debug_assert!(self.reset_pending, "RESET is not asserted");
+        debug_assert!(
+            self.pending_lines & LINE_RESET != 0,
+            "RESET is not asserted"
+        );
         self.pc = 0;
         self.im = 0;
         self.iff1 = false;
@@ -222,10 +252,10 @@ impl<B: Bus> Z80<B> {
     /// Enter a pending NMI at an instruction boundary.
     pub(crate) fn accept_non_maskable_interrupt(&mut self) -> u32 {
         debug_assert!(
-            self.non_maskable_interrupt_pending,
+            self.pending_lines & LINE_NMI != 0,
             "no non-maskable interrupt is pending"
         );
-        self.non_maskable_interrupt_pending = false;
+        self.pending_lines &= !LINE_NMI;
         self.halted = false;
         if self.ei_nmi_iff2_erratum && self.ei_delay > 0 {
             // Opt-in NMOS quirk: an NMI landing inside EI's one-instruction
@@ -247,9 +277,11 @@ impl<B: Bus> Z80<B> {
 
     /// Enter a pending maskable interrupt at an instruction boundary.
     pub(crate) fn accept_maskable_interrupt(&mut self) -> Result<u32, Fault> {
-        let vector_byte = self
-            .pending_maskable_interrupt
-            .expect("no maskable interrupt is pending");
+        debug_assert!(
+            self.pending_lines & LINE_INT != 0,
+            "no maskable interrupt is pending"
+        );
+        let vector_byte = self.int_vector;
         debug_assert!(
             self.iff1 && self.ei_delay == 0,
             "maskable interrupts cannot currently be accepted"
@@ -258,7 +290,7 @@ impl<B: Bus> Z80<B> {
             return Err(Fault::Im0NonRstVector(vector_byte));
         }
 
-        self.pending_maskable_interrupt = None;
+        self.pending_lines &= !LINE_INT;
         self.halted = false;
         self.iff1 = false;
         self.iff2 = false;

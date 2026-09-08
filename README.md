@@ -94,7 +94,8 @@ noise on one binary is about 0.2%.
 | `52192d1` | Baseline: the transcription as forked | 69.3 s | 60.1 s (nf6; 62.3 nf5) | 95.8 |
 | `d27af51` | Main dispatch: one exhaustive `match` over the opcode byte, prefixes included, instead of the if-chain | 43.0 s | 43.0 s (default; 43.2 nf6, 45.8 nf5) | 134.0 |
 | `5814b1f` | DD/FD dispatch: the same `match` for the byte after the prefix (`bench/ix-loop.json` 3.86 s to 2.99 s) | 43.3 s | 43.0 s (nf5; 43.6 nf6) | 134.1 |
-| next | ED dispatch: the same `match` for the byte after ED (`bench/ed-loop.json` 2.27 s to 2.04 s) | 47.1 s | 43.2 s (nf6; 43.6 nf5) | 133.3 |
+| `4f0dbe7` | ED dispatch: the same `match` for the byte after ED (`bench/ed-loop.json` 2.27 s to 2.04 s) | 47.1 s | 43.2 s (nf6; 43.6 nf5) | 133.3 |
+| next | Lifecycle requests as one byte: `step()` tests RESET, NMI, INT with one load and takes a cold path only when a line is up | 43.7 s | 40.6 s (nf6; 41.9 nf5) | 141.9 |
 
 ### Profile of the baseline
 
@@ -154,6 +155,15 @@ re-run clean on each.
    exposed the layout sensitivity described above: `step()` was
    byte-identical and had moved; layout-controlled, 43.2 s against the
    previous commit's 43.0 s.
+4. **Lifecycle lines as one byte.** `step()` began with three tests
+   (`reset_pending`, `non_maskable_interrupt_pending`, `iff1 && ei_delay
+   == 0 && pending_maskable_interrupt.is_some()`), 11% of self time with
+   `can_accept_maskable_interrupt` in the profile. The three requests are
+   now bits of one `pending_lines` byte plus the INT vector byte; `step()`
+   tests the byte and calls a `#[cold]` function that applies the
+   reference's priority order only when something is pending.
+   `capture_state`/`restore_state` and the request/clear API translate, so
+   the 28 `CpuState` fields are unchanged. 43.2 s to 40.6 s.
 
 ## Using the core
 
