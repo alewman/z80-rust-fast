@@ -1,14 +1,21 @@
-//! A Rust Z80 instruction core transcribed from `z80-python`.
+//! A fast Rust Z80 instruction core, forked from `z80-rust` and kept
+//! provably equivalent to `z80-python` at every processor boundary.
 //!
-//! The module layout mirrors the reference so the two can be read side by
-//! side: `flags`, `state`, `core`, `alu`, `blocks`, `control`, `dispatch`,
-//! `index`, `index_dispatch`, `io`, `loads`, `rotate`, and `cpu` correspond
-//! one-to-one with `z80_python/_flags.py`, `state.py`, `_core.py`, and so on.
-//! `trace` and `conformance` implement the trace schema and the conformance
-//! kit (`docs/trace-schema.md` and `docs/conformance.md` in z80-python).
+//! The crate name stays `z80_rust` so a host written for z80-rust compiles
+//! unchanged. The instruction core (`flags`, `state`, `core`, `alu`,
+//! `blocks`, `control`, `dispatch`, `index`, `index_dispatch`, `io`, `loads`,
+//! `rotate`, `cpu`) needs nothing from `std`; `trace` and `conformance`
+//! implement the trace schema and the conformance kit (`docs/trace-schema.md`
+//! and `docs/conformance.md` in z80-python) and need the default `std`
+//! feature.
+
+#![cfg_attr(not(feature = "std"), no_std)]
+
+extern crate alloc;
 
 pub mod alu;
 pub mod blocks;
+#[cfg(feature = "std")]
 pub mod conformance;
 pub mod control;
 pub mod core;
@@ -21,6 +28,7 @@ pub mod io;
 pub mod loads;
 pub mod rotate;
 pub mod state;
+#[cfg(feature = "std")]
 pub mod trace;
 
 pub use crate::core::{Bus, Fault, Z80};

@@ -19,6 +19,8 @@ jobs:
         with:
           components: rustfmt, clippy
       - run: cargo fmt --check
+      - name: The core builds without std
+        run: cargo build --release --no-default-features
       - run: cargo clippy --release --all-targets -- -D warnings
       - run: cargo test --release
 
