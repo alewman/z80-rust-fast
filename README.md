@@ -100,7 +100,8 @@ noise on one binary is about 0.2%.
 | `94bd13a` | Dispatch arms expanded to one per opcode with the opcode as a literal argument (`tools/expand_dispatch.py`) | 38.6 s | 37.8 s (nf5; 38.8 nf6) | 152.3 |
 | `dc1e28b` | `#[inline]` on the conformance host's `Bus` methods and the CP/M trap check, which were real calls from the binaries' crate on every read and every step | 21.3 s | 20.5 s (nf6; 22.3 nf5) | 281.0 |
 | `653281c` | 8-bit ALU and CB rotate flags composed as one byte from a compile-time S/Z/X/Y/parity table instead of five to seven setter calls | 20.0 s | 19.8 s (nf6 19.75, nf5 19.76) | 291.8 |
-| next | The remaining flag writers the same way: ADC/SBC HL, ADD HL/IX/IY, RLCA/RRCA/RLA/RRA, BIT, IN r,(C), RRD/RLD, LD A,I/R (no measurable ZEXALL change) | 20.5 s | 19.7 s (nf6 19.69, nf5 19.72) | 292.8 |
+| `2a5eac5` | The remaining flag writers the same way: ADC/SBC HL, ADD HL/IX/IY, RLCA/RRCA/RLA/RRA, BIT, IN r,(C), RRD/RLD, LD A,I/R (no measurable ZEXALL change) | 20.5 s | 19.7 s (nf6 19.69, nf5 19.72) | 292.8 |
+| next | Build profile: `lto = "fat"`, `codegen-units = 1` | 17.9 s | 17.0 s (nf6; 17.8 nf5) | 338.8 |
 
 ### Profile of the baseline
 
@@ -220,6 +221,9 @@ re-run clean on each.
     `LD A,R` (preserve C) composed the same way. ZEXALL barely runs them:
     19.75 s to 19.69 s, within noise. Done for consistency, so every F
     write in the core is one assignment with its preserved bits named.
+11. **Fat LTO and one codegen unit.** The first build-profile change, after
+    the source-level work so each earlier number stands on the default
+    profile. 19.7 s to 17.0 s.
 
 ## Using the core
 
