@@ -2,7 +2,7 @@
 //!
 //! Transcribed from `z80_python/cpu.py`.
 
-use crate::core::{Bus, Fault, Z80};
+use crate::core::{Bus, Fault, LINE_INT, LINE_NMI, LINE_RESET, Z80};
 use crate::state::CpuState;
 
 impl<B: Bus> Z80<B> {
@@ -14,14 +14,12 @@ impl<B: Bus> Z80<B> {
     /// it. T-states are instruction/lifecycle totals, not externally
     /// observable bus cycles.
     pub fn step(&mut self) -> Result<u32, Fault> {
-        if self.reset_pending {
-            return Ok(self.accept_reset());
-        }
-        if self.non_maskable_interrupt_pending {
-            return Ok(self.accept_non_maskable_interrupt());
-        }
-        if self.can_accept_maskable_interrupt() {
-            return self.accept_maskable_interrupt();
+        // One byte test covers RESET, NMI, and INT; the priority order and
+        // the acceptance rule live in service_pending_lines.
+        if self.pending_lines != 0 {
+            if let Some(t_states) = self.service_pending_lines()? {
+                return Ok(t_states);
+            }
         }
 
         let delay_was_active = self.ei_delay > 0;
@@ -68,9 +66,13 @@ impl<B: Bus> Z80<B> {
             q: self.q,
             halted: self.halted,
             ei_delay: self.ei_delay,
-            reset_pending: self.reset_pending,
-            maskable_interrupt_vector: self.pending_maskable_interrupt,
-            non_maskable_interrupt_pending: self.non_maskable_interrupt_pending,
+            reset_pending: self.pending_lines & LINE_RESET != 0,
+            maskable_interrupt_vector: if self.pending_lines & LINE_INT != 0 {
+                Some(self.int_vector)
+            } else {
+                None
+            },
+            non_maskable_interrupt_pending: self.pending_lines & LINE_NMI != 0,
         }
     }
 
@@ -101,53 +103,62 @@ impl<B: Bus> Z80<B> {
         self.q = state.q;
         self.halted = state.halted;
         self.ei_delay = state.ei_delay;
-        self.reset_pending = state.reset_pending;
-        self.pending_maskable_interrupt = state.maskable_interrupt_vector;
-        self.non_maskable_interrupt_pending = state.non_maskable_interrupt_pending;
+        self.pending_lines = 0;
+        if state.reset_pending {
+            self.pending_lines |= LINE_RESET;
+        }
+        if let Some(vector) = state.maskable_interrupt_vector {
+            self.pending_lines |= LINE_INT;
+            self.int_vector = vector;
+        }
+        if state.non_maskable_interrupt_pending {
+            self.pending_lines |= LINE_NMI;
+        }
     }
 
     /// Whether the host has asserted RESET.
     pub fn reset_pending(&self) -> bool {
-        self.reset_pending
+        self.pending_lines & LINE_RESET != 0
     }
 
     /// Assert RESET for servicing at the next instruction boundary.
     pub fn request_reset(&mut self) {
-        self.reset_pending = true;
+        self.pending_lines |= LINE_RESET;
     }
 
     /// Release the host-controlled RESET line.
     pub fn clear_reset(&mut self) {
-        self.reset_pending = false;
+        self.pending_lines &= !LINE_RESET;
     }
 
     /// Whether a device has requested a maskable interrupt not yet accepted.
     pub fn maskable_interrupt_pending(&self) -> bool {
-        self.pending_maskable_interrupt.is_some()
+        self.pending_lines & LINE_INT != 0
     }
 
     /// Assert the maskable-interrupt request line between instruction boundaries.
     pub fn request_maskable_interrupt(&mut self, vector_byte: u8) {
-        self.pending_maskable_interrupt = Some(vector_byte);
+        self.pending_lines |= LINE_INT;
+        self.int_vector = vector_byte;
     }
 
     /// Deassert a previously requested but not-yet-accepted interrupt.
     pub fn clear_maskable_interrupt(&mut self) {
-        self.pending_maskable_interrupt = None;
+        self.pending_lines &= !LINE_INT;
     }
 
     /// Whether a device has requested a non-maskable interrupt not yet accepted.
     pub fn non_maskable_interrupt_pending(&self) -> bool {
-        self.non_maskable_interrupt_pending
+        self.pending_lines & LINE_NMI != 0
     }
 
     /// Latch an NMI request for service at the next instruction boundary.
     pub fn request_non_maskable_interrupt(&mut self) {
-        self.non_maskable_interrupt_pending = true;
+        self.pending_lines |= LINE_NMI;
     }
 
     /// Cancel a requested NMI that has not yet reached an instruction boundary.
     pub fn clear_non_maskable_interrupt(&mut self) {
-        self.non_maskable_interrupt_pending = false;
+        self.pending_lines &= !LINE_NMI;
     }
 }
