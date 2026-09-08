@@ -107,76 +107,50 @@ impl<B: Bus> Z80<B> {
         Ok(t_states)
     }
 
+    /// Dispatch the byte after an ED prefix: one `match`, every defined
+    /// opcode named, and the `_` arm is the reference's rule that every
+    /// other ED byte is a 2-byte, 8 T-state no-op on real silicon.
+    #[inline(never)]
     pub(crate) fn execute_ed(&mut self, opcode: u8) -> u32 {
-        // Explicit dispatch keeps each opcode directly traceable.
         match opcode {
-            0x47 => return self.op_ld_i_a(),
-            0x4F => return self.op_ld_r_a(),
-            0x57 => return self.op_ld_a_i(),
-            0x5F => return self.op_ld_a_r(),
-            0x67 => return self.op_rrd(),
-            0x6F => return self.op_rld(),
-            0x77 | 0x7F => return self.op_ed_nop(),
-            0xA0 => return self.op_ldi(),
-            0xA1 => return self.op_cpi(),
-            0xA2 => return self.op_ini(),
-            0xA3 => return self.op_outi(),
-            0xA8 => return self.op_ldd(),
-            0xA9 => return self.op_cpd(),
-            0xAA => return self.op_ind(),
-            0xAB => return self.op_outd(),
-            0xB0 => return self.op_ldir(),
-            0xB1 => return self.op_cpir(),
-            0xB2 => return self.op_inir(),
-            0xB3 => return self.op_otir(),
-            0xB8 => return self.op_lddr(),
-            0xB9 => return self.op_cpdr(),
-            0xBA => return self.op_indr(),
-            0xBB => return self.op_otdr(),
-            _ => {}
+            0x40 | 0x48 | 0x50 | 0x58 | 0x60 | 0x68 | 0x70 | 0x78 => self.op_in_r_c(opcode),
+            0x41 | 0x49 | 0x51 | 0x59 | 0x61 | 0x69 | 0x71 | 0x79 => self.op_out_c_r(opcode),
+            0x42 | 0x52 | 0x62 | 0x72 => self.op_sbc_hl_rr(opcode),
+            0x43 | 0x53 | 0x63 | 0x73 => self.op_ld_nn_rr((opcode >> 4) & 0x03),
+            0x44 | 0x4C | 0x54 | 0x5C | 0x64 | 0x6C | 0x74 | 0x7C => self.op_neg(),
+            0x45 | 0x55 | 0x65 | 0x75 => self.op_retn(),
+            0x46 | 0x4E | 0x66 | 0x6E => self.op_im(0),
+            0x47 => self.op_ld_i_a(),
+            0x4A | 0x5A | 0x6A | 0x7A => self.op_adc_hl_rr(opcode),
+            0x4B | 0x5B | 0x6B | 0x7B => self.op_ld_rr_nn_from_mem((opcode >> 4) & 0x03),
+            0x4D | 0x5D | 0x6D | 0x7D => self.op_reti(),
+            0x4F => self.op_ld_r_a(),
+            0x56 | 0x76 => self.op_im(1),
+            0x57 => self.op_ld_a_i(),
+            0x5E | 0x7E => self.op_im(2),
+            0x5F => self.op_ld_a_r(),
+            0x67 => self.op_rrd(),
+            0x6F => self.op_rld(),
+            0xA0 => self.op_ldi(),
+            0xA1 => self.op_cpi(),
+            0xA2 => self.op_ini(),
+            0xA3 => self.op_outi(),
+            0xA8 => self.op_ldd(),
+            0xA9 => self.op_cpd(),
+            0xAA => self.op_ind(),
+            0xAB => self.op_outd(),
+            0xB0 => self.op_ldir(),
+            0xB1 => self.op_cpir(),
+            0xB2 => self.op_inir(),
+            0xB3 => self.op_otir(),
+            0xB8 => self.op_lddr(),
+            0xB9 => self.op_cpdr(),
+            0xBA => self.op_indr(),
+            0xBB => self.op_otdr(),
+            // Every ED-prefixed byte not otherwise defined is a genuine Z80
+            // instruction on real silicon: a 2-byte, 8 T-state no-op. That
+            // includes 0x77 and 0x7F inside the documented 0x40-0x7F block.
+            _ => self.op_ed_nop(),
         }
-        if matches!(opcode, 0x45 | 0x55 | 0x65 | 0x75) {
-            return self.op_retn();
-        }
-        if matches!(opcode, 0x4D | 0x5D | 0x6D | 0x7D) {
-            return self.op_reti();
-        }
-        if matches!(opcode, 0x4A | 0x5A | 0x6A | 0x7A) {
-            return self.op_adc_hl_rr(opcode);
-        }
-        if matches!(opcode, 0x42 | 0x52 | 0x62 | 0x72) {
-            return self.op_sbc_hl_rr(opcode);
-        }
-        if matches!(opcode, 0x43 | 0x53 | 0x63 | 0x73) {
-            return self.op_ld_nn_rr((opcode >> 4) & 0x03);
-        }
-        if matches!(opcode, 0x4B | 0x5B | 0x6B | 0x7B) {
-            return self.op_ld_rr_nn_from_mem((opcode >> 4) & 0x03);
-        }
-        if matches!(opcode, 0x46 | 0x4E | 0x66 | 0x6E) {
-            return self.op_im(0);
-        }
-        if matches!(opcode, 0x56 | 0x76) {
-            return self.op_im(1);
-        }
-        if matches!(opcode, 0x5E | 0x7E) {
-            return self.op_im(2);
-        }
-        if matches!(
-            opcode,
-            0x44 | 0x4C | 0x54 | 0x5C | 0x64 | 0x6C | 0x74 | 0x7C
-        ) {
-            return self.op_neg();
-        }
-        if (0x40..=0x78).contains(&opcode) && (opcode & 0x07) == 0 {
-            return self.op_in_r_c(opcode);
-        }
-        if (0x41..=0x79).contains(&opcode) && (opcode & 0x07) == 1 {
-            return self.op_out_c_r(opcode);
-        }
-        // Every ED-prefixed byte not otherwise defined is a genuine Z80 instruction
-        // on real silicon: a 2-byte, 8 T-state no-op. Only 0x77/0x7F fell inside the
-        // documented 0x40-0x7F block; the rest of the ED space needs the same rule.
-        self.op_ed_nop()
     }
 }

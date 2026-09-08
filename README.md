@@ -74,23 +74,27 @@ The measure is `z80-bench`: a plain `step()` loop over ZEXALL with the
 `cpm-minimal` traps, no trace records and no state capture, 5,764,169,474
 instructions and 46,734,975,782 T-states. `scripts/bench.sh` builds release
 and runs it pinned to one logical CPU (`CPU`, default 4, a P-core on the
-i9-13900K; the E-cores are about 1.45× slower on this loop and an unpinned
+i9-13900K; the E-cores are about 1.45x slower on this loop and an unpinned
 run may land on either).
 
-| Commit | Change | ZEXALL wall time | M instructions/s | Equivalent Z80 clock |
+**Code placement matters as much as small optimizations here.** Two builds
+whose `step()` code was byte-identical differed by 9% (7.50 s against 8.17 s
+per 1,000,000,000 instructions) because an unrelated function changed size
+and moved the hot code 0x5e0 bytes. With LLVM's
+`-align-all-nofallthru-blocks=5` or `=6` (branch-target blocks on 32- or
+64-byte boundaries) the same two builds agree within 1-3%, in both
+directions. So `scripts/bench.sh` builds three layouts, the default and
+those two, runs each, and prints the minimum; the minimum over layouts is
+the figure that says whether a change helped, and the default-build figure
+is kept because it is what `cargo build --release` produces. Run-to-run
+noise on one binary is about 0.2%.
+
+| Commit | Change | Default build | Min over layouts | M instructions/s (min) |
 | --- | --- | --- | --- | --- |
-| `52192d1` | Baseline: the transcription as forked | 69.3 s (69.28, 69.39, 69.43) | 83.1 | 674 MHz |
-| `d27af51` | Main dispatch: one exhaustive `match` over the opcode byte, prefixes included, instead of the if-chain | 43.0 s (43.01, 42.98) | 134.1 | 1,087 MHz |
-| next | DD/FD dispatch: the same `match` shape for the byte after the prefix (no ZEXALL change; `bench/ix-loop.json` 3.86 s to 2.99 s) | 43.2 s (43.15, 43.21) | 133.5 | 1,082 MHz |
-
-z80-rust's README quotes 116 s for the same loop; that measurement was not
-pinned, and a 1,000,000,000-instruction slice of ZEXALL takes 11.96 s on
-P-core 4, 12.05 s unpinned, and 17.35 s on E-core 20 here, so the two are
-not comparable and every number in this table is taken the pinned way.
-
-Build profile: `cargo`'s default release profile with `debug = 1` for
-symbols; no LTO, no `target-cpu`, no PGO yet. Build-profile changes come
-last because they move every earlier number.
+| `52192d1` | Baseline: the transcription as forked | 69.3 s | 60.1 s (nf6; 62.3 nf5) | 95.8 |
+| `d27af51` | Main dispatch: one exhaustive `match` over the opcode byte, prefixes included, instead of the if-chain | 43.0 s | 43.0 s (default; 43.2 nf6, 45.8 nf5) | 134.0 |
+| `5814b1f` | DD/FD dispatch: the same `match` for the byte after the prefix (`bench/ix-loop.json` 3.86 s to 2.99 s) | 43.3 s | 43.0 s (nf5; 43.6 nf6) | 134.1 |
+| next | ED dispatch: the same `match` for the byte after ED (`bench/ed-loop.json` 2.27 s to 2.04 s) | 47.1 s | 43.2 s (nf6; 43.6 nf5) | 133.3 |
 
 ### Profile of the baseline
 
@@ -135,12 +139,21 @@ re-run clean on each.
    if-chain, up to forty tests per instruction and 22% of self time; it is
    now one `match` over all 256 opcode bytes with no `_` arm, the CB/ED/
    DD/FD prefix tests folded in as arms, each arm calling the same handler
-   with the same argument. `execute_cb` likewise. 69.3 s to 43.0 s.
+   with the same argument. `execute_cb` likewise. 69.3 s to 43.0 s in the
+   default build; 60.1 s to 43.0 s with layouts controlled.
 2. **DD/FD dispatch as a jump table.** `execute_index_opcode` was a
    sixty-test if-chain; now one exhaustive `match`. ZEXALL has too few
    prefixed instructions to move (43.2 s, within noise), so the change is
    measured on `bench/ix-loop.json`, a loop of five IX instructions and a
    JR: 3.86 s to 2.99 s, 78 to 100 M instructions/s.
+3. **ED dispatch as a jump table.** `execute_ed` was a `match` on the
+   block instructions followed by an if-chain; now one `match` whose `_`
+   arm is the reference's ED no-op rule. `bench/ed-loop.json` (NEG, ADC
+   HL,BC, LD A,I, LD A,R, JR): 2.27 s to 2.04 s. The default build of
+   ZEXALL got 9% slower (43.3 s to 47.1 s) and this is the change that
+   exposed the layout sensitivity described above: `step()` was
+   byte-identical and had moved; layout-controlled, 43.2 s against the
+   previous commit's 43.0 s.
 
 ## Using the core
 
