@@ -74,3 +74,15 @@ transcription this repository forks has its own record in
   (`/data/emu/z80-rust-fast-wt`), CPUs 10-31, 22 PyPy jobs, ZEXALL then
   ZEXDOC, so the dispatch and flag changes are proven at the lockstep rung
   while the build-profile work continues on the other cores.
+- **08:37 to 08:50, build profile.** Fat LTO and one codegen unit
+  (6fb0786): 19.7 s to 17.0 s. `target-cpu=native` measured and rejected
+  (-8% to +2% by layout). 64-byte branch-target alignment made the default
+  build (c5f04b5): 16.8 s quiet. `scripts/pgo.sh` added; the PGO build
+  runs ZEXALL in 15.1 s. The measurement discipline had to tighten here:
+  a sweep taken while builds and the rung 3 jobs ran read 20-26 s and was
+  discarded; the recorded numbers were taken with the PyPy jobs paused
+  (`SIGSTOP`) and nothing else running.
+- **Open when this record was written:** rung 3 on 2a5eac5 (see the
+  README ladder table), the GitHub repository (not created; the user
+  asked for push on request), and the wasm project, which is next and
+  not started.
