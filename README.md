@@ -96,7 +96,8 @@ noise on one binary is about 0.2%.
 | `5814b1f` | DD/FD dispatch: the same `match` for the byte after the prefix (`bench/ix-loop.json` 3.86 s to 2.99 s) | 43.3 s | 43.0 s (nf5; 43.6 nf6) | 134.1 |
 | `4f0dbe7` | ED dispatch: the same `match` for the byte after ED (`bench/ed-loop.json` 2.27 s to 2.04 s) | 47.1 s | 43.2 s (nf6; 43.6 nf5) | 133.3 |
 | `a19edfc` | Lifecycle requests as one byte: `step()` tests RESET, NMI, INT with one load and takes a cold path only when a line is up | 43.7 s | 40.6 s (nf6; 41.9 nf5) | 141.9 |
-| next | Fetched bytes in an inline 8-byte buffer; a `Vec` only for prefix runs longer than that | 38.6 s | 38.6 s (default; 40.3 nf6, 41.4 nf5) | 149.2 |
+| `60b843c` | Fetched bytes in an inline 8-byte buffer; a `Vec` only for prefix runs longer than that | 38.6 s | 38.6 s (default; 40.3 nf6, 41.4 nf5) | 149.2 |
+| next | Dispatch arms expanded to one per opcode with the opcode as a literal argument (`tools/expand_dispatch.py`) | 38.6 s | 37.8 s (nf5; 38.8 nf6) | 152.3 |
 
 ### Profile of the baseline
 
@@ -172,6 +173,14 @@ re-run clean on each.
    returns the same slice either way, and `tests/fetched_bytes.rs` covers
    the spill, since no manifest records an instruction longer than five
    bytes. 40.6 s to 38.6 s.
+6. **One arm per opcode.** The grouped arms (`0x40..=0x75 | 0x77..=0x7F
+   => self.op_ld_r_r(opcode)`) share one body, so the handler decodes the
+   register fields at run time. `tools/expand_dispatch.py` rewrote every
+   table so each opcode has its own arm with the opcode as a literal
+   (`0x41 => self.op_ld_r_r(0x41)`), the mapping otherwise untouched.
+   38.6 s to 37.8 s; `ix-loop` 2.99 s to 2.42 s, `ed-loop` 2.04 s to
+   about 1.8 s. The larger gain needs the handlers inlined so the literal
+   folds, which is the next change.
 
 ## Using the core
 
