@@ -49,3 +49,8 @@ required-features = ["std"]
 
 [profile.release]
 debug = 1
+# Build profile, applied after the source-level work so each earlier
+# number stands: one codegen unit and fat LTO let LLVM see the core, the
+# host, and the binary's loop as one unit.
+codegen-units = 1
+lto = "fat"
