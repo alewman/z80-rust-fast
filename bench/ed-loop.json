@@ -1,0 +1,1 @@
+{"version":1,"name":"ed-loop","host":"flat","memory":[{"address":256,"data":"ed44ed4aed57ed5f18f6"}],"initial":{"pc":256,"sp":61440},"stop":{"max_steps":300000000,"on_halt":true}}

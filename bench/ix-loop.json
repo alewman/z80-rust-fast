@@ -1,0 +1,1 @@
+{"version":1,"name":"ix-loop","host":"flat","memory":[{"address":256,"data":"dd210080dd7e01dd8602dd7703dd23dd2b18f1"}],"initial":{"pc":256,"sp":61440},"stop":{"max_steps":300000000,"on_halt":true}}
