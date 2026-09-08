@@ -94,19 +94,28 @@ impl ConformanceHost {
     }
 }
 
+// The binaries are separate crates, and without `#[inline]` a non-generic
+// function in this crate is a real call from them: every byte the core
+// read was a call into read_byte, and every step a call into
+// handle_cpm_trap. The attribute is a hint about placement, not a change
+// in what the host does.
 impl Bus for ConformanceHost {
+    #[inline]
     fn read_byte(&mut self, addr: u16) -> u8 {
         self.memory[usize::from(addr)]
     }
 
+    #[inline]
     fn write_byte(&mut self, addr: u16, value: u8) {
         self.memory[usize::from(addr)] = value;
     }
 
+    #[inline]
     fn read_port(&mut self, _addr: u16) -> u8 {
         self.port_read_value
     }
 
+    #[inline]
     fn write_port(&mut self, _addr: u16, _value: u8) {}
 }
 
@@ -177,6 +186,7 @@ impl From<io::Error> for RunError {
 /// PC == 0x0000 ends the run; PC == 0x0005 performs BDOS function C (0 ends
 /// the run, 2 appends E, 9 appends bytes from DE up to `$`), then pops the
 /// return address into PC.
+#[inline]
 pub fn handle_cpm_trap(cpu: &mut Z80<ConformanceHost>) -> Result<bool, RunError> {
     if cpu.pc == WARM_BOOT {
         return Ok(true);
@@ -184,6 +194,14 @@ pub fn handle_cpm_trap(cpu: &mut Z80<ConformanceHost>) -> Result<bool, RunError>
     if cpu.pc != BDOS_ENTRY {
         return Ok(false);
     }
+    bdos_call(cpu)
+}
+
+/// The BDOS function part of [`handle_cpm_trap`], out of line because it
+/// runs once per console character, not once per instruction.
+#[cold]
+#[inline(never)]
+fn bdos_call(cpu: &mut Z80<ConformanceHost>) -> Result<bool, RunError> {
     let function = cpu.c;
     if function == 0 {
         return Ok(true);
