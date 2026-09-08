@@ -86,6 +86,12 @@ transcription this repository forks has its own record in
   `alewman/z80-rust-fast` was created and `main` pushed at 2fb7c98. The
   first CI run passed all four jobs (fmt/clippy/test with the no_std
   build, rung 1 with rung 5, rung 2, rung 6) on the first try.
-- **Open when this record was written:** rung 3 on 2a5eac5 (see the
-  README ladder table) and the wasm project, which is next and not
-  started.
+- **09:20, public.** Both Rust cores made public on the user's
+  instruction after a scan for secrets and machine-local paths.
+- **13:09, rung 3 ZEXALL identical** at 2a5eac5: 116 segments, every one
+  `traces are identical`, 4 h 34 min with 22 PyPy processes confined to
+  CPUs 10-31 (the earlier runs took about 7 h with 30 unconfined
+  processes; the segment diffs run at the same speed on the fast core
+  because the reference side is the bottleneck). ZEXDOC started 13:10.
+- **Open when this record was written:** rung 3 ZEXDOC on 2a5eac5 and
+  the wasm project, which is next and not started.
