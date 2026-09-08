@@ -14,6 +14,12 @@ it does. The conformance ladder is the definition of "what it does": a
 change that fails a rung is not an optimization, and every change is one
 commit with the measurement that justifies it.
 
+Where it stands (2026-09-08): ZEXALL's 5,764,169,474 instructions in
+**16.8 s** with `cargo build --release` (344 M instructions/s, a 2.8 GHz
+Z80) and 15.1 s with the optional PGO build, from 69.3 s as forked on the
+same measure (60.1 s once code placement is controlled for). Every change
+is one commit with its measurement, in the table under "Speed".
+
 The library keeps the crate name `z80_rust`, so a host written for z80-rust
 (`use z80_rust::{Bus, Z80}`) compiles against this crate unchanged. The
 `Bus` trait, `Z80<B>`, `step()`, `capture_state()`/`restore_state()`, the
@@ -37,15 +43,21 @@ Linux x86_64 (i9-13900K) with rustc 1.93.1, CPython 3.14.4 and PyPy 7.3.20:
 
 | Rung | What | Result | Last run at | Script |
 | --- | --- | --- | --- | --- |
-| 1 | The three example manifests diff clean against the reference | `traces are identical` ×3 | `52192d1` | `rung1.sh` |
-| 2 | SingleStepTests, 1,604 files | `TOTAL: 1604000 passed, 0 failed, 0 not implemented / 1604000 cases` | `52192d1` | `rung2.sh` |
-| 3 | ZEXALL and ZEXDOC in lockstep against the reference, 116 segments each | `every segment identical`, 5,764,169,474 records each | z80-rust `43c5122`; the instruction modules are unchanged since. Re-run before the first tag and after any change to dispatch or block instructions | `rung3.sh` |
-| 4 | z80test natively: `z80full`, `z80ccf`, `z80memptr` | all three `Result: all tests passed.` | `52192d1` | `rung4.sh` |
-| 5 | The ten interrupt scenarios as manifests with events | all ten `traces are identical` | `52192d1` | `rung5.sh` |
-| 6 | FUSE 1.6.0's core test set, 1,356 cases, six explained divergences pinned | `1350 agree, 6 expected divergences, 0 unexpected` | `52192d1` | `rung6.sh` |
+| 1 | The three example manifests diff clean against the reference | `traces are identical` x3 | `c5f04b5` and every commit before it | `rung1.sh` |
+| 2 | SingleStepTests, 1,604 files | `TOTAL: 1604000 passed, 0 failed, 0 not implemented / 1604000 cases` | `c5f04b5` and every commit before it | `rung2.sh` |
+| 3 | ZEXALL and ZEXDOC in lockstep against the reference, 116 segments each | z80-rust `43c5122` (the fork point): `every segment identical`, 5,764,169,474 records each. **At `2a5eac5` (all source-level changes; the two commits after it change only the build profile): running**, started 2026-09-08 08:35, ZEXALL then ZEXDOC, 22 PyPy processes; the result will be recorded here when it finishes | `rung3.sh` |
+| 4 | z80test natively: `z80full`, `z80ccf`, `z80memptr` | all three `Result: all tests passed.` | `c5f04b5` and every commit before it | `rung4.sh` |
+| 5 | The ten interrupt scenarios as manifests with events | all ten `traces are identical` | `c5f04b5` and every commit before it | `rung5.sh` |
+| 6 | FUSE 1.6.0's core test set, 1,356 cases, six explained divergences pinned | `1350 agree, 6 expected divergences, 0 unexpected` | `c5f04b5` and every commit before it | `rung6.sh` |
 
-Rungs 1, 2, 4, 5, and 6 are re-run on every optimization commit; the commit
-message carries the bench number before and after. CI
+Rungs 1, 2, 4, 5, and 6 were re-run clean on every commit that touches
+`src/` or the build profile; each commit message carries the bench number
+before and after. Rung 3 is required before any tag and after any change
+to dispatch or the block instructions; the dispatch changes are in
+`d27af51`..`94bd13a`, the block instructions are untouched, and the run on
+`2a5eac5` covers them. Until it reports, the claim for this repository is
+"rungs 1, 2, 4, 5, 6 at `c5f04b5`; rung 3 at the fork point", not "the
+whole ladder". CI
 (`.github/workflows/ci.yml`) reproduces rungs 1, 2, 5, and 6 on every push,
 builds the core without `std`, and runs `cargo fmt --check`, `cargo clippy
 -D warnings`, and `cargo test`.
@@ -107,7 +119,7 @@ taken with those processes paused.
 | `653281c` | 8-bit ALU and CB rotate flags composed as one byte from a compile-time S/Z/X/Y/parity table instead of five to seven setter calls | 20.0 s | 19.8 s (nf6 19.75, nf5 19.76) | 291.8 |
 | `2a5eac5` | The remaining flag writers the same way: ADC/SBC HL, ADD HL/IX/IY, RLCA/RRCA/RLA/RRA, BIT, IN r,(C), RRD/RLD, LD A,I/R (no measurable ZEXALL change) | 20.5 s | 19.7 s (nf6 19.69, nf5 19.72) | 292.8 |
 | `6fb0786` | Build profile: `lto = "fat"`, `codegen-units = 1` | 17.9 s | 17.0 s (nf6; 17.8 nf5) | 338.8 |
-| next | 64-byte branch-target alignment becomes the default build (`.cargo/config.toml`); sweep is now default / noalign / nf5 | 16.8 s | 16.8 s (default; 17.0 nf5, 17.5 noalign) | 343.8 |
+| `c5f04b5` | 64-byte branch-target alignment becomes the default build (`.cargo/config.toml`); sweep is now default / noalign / nf5 | 16.8 s | 16.8 s (default; 17.0 nf5, 17.5 noalign) | 343.8 |
 | (optional) | `scripts/pgo.sh`: profile-guided build trained on ZEXALL and the two loops, output under `target/pgo-use/` | 15.1 s | 15.1 s (one layout) | 382.8 |
 
 ### Profile of the baseline
