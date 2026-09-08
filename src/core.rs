@@ -5,6 +5,8 @@
 //! [`Bus`] value owned by the [`Z80`] struct, and every instruction module
 //! is an `impl<B: Bus> Z80<B>` block, one file per Python mixin.
 
+use alloc::vec::Vec;
+
 use crate::flags::Flags;
 
 /// Memory and I/O supplied by the host. Addresses are already 16-bit and
@@ -35,8 +37,8 @@ pub enum Fault {
     Im0NonRstVector(u8),
 }
 
-impl std::fmt::Display for Fault {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for Fault {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Fault::UnhandledIndexOpcode { prefix, opcode, pc } => write!(
                 f,
@@ -53,6 +55,7 @@ impl std::fmt::Display for Fault {
     }
 }
 
+#[cfg(feature = "std")]
 impl std::error::Error for Fault {}
 
 /// Z80 instruction core with memory and I/O supplied by the host `B`.

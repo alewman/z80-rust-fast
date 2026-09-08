@@ -4,7 +4,8 @@
 //! the definition of "processor state" for conformance purposes
 //! (`docs/trace-schema.md` in z80-python).
 
-use std::fmt::Write as _;
+use alloc::string::{String, ToString};
+use core::fmt::Write as _;
 
 /// Complete CPU-owned state at an instruction boundary.
 ///

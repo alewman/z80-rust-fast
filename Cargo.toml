@@ -9,11 +9,43 @@ repository = "https://github.com/alewman/z80-rust-fast"
 publish = false
 
 [lib]
+# The library keeps z80-rust's crate name so a host written for it compiles
+# against this fork unchanged: `use z80_rust::{Bus, Z80}`.
 name = "z80_rust"
 
+[features]
+default = ["std"]
+# The instruction core needs nothing from std. `std` enables the trace
+# producer, the conformance kit, the binaries, and the rung 1 test.
+std = ["dep:serde", "dep:serde_json"]
+
 [dependencies]
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde = { version = "1", features = ["derive"], optional = true }
+serde_json = { version = "1", optional = true }
+
+[[bin]]
+name = "z80-trace"
+required-features = ["std"]
+
+[[bin]]
+name = "z80-vectors"
+required-features = ["std"]
+
+[[bin]]
+name = "z80-z80test"
+required-features = ["std"]
+
+[[bin]]
+name = "z80-fuse"
+required-features = ["std"]
+
+[[bin]]
+name = "z80-bench"
+required-features = ["std"]
+
+[[test]]
+name = "rung1"
+required-features = ["std"]
 
 [profile.release]
 debug = 1
