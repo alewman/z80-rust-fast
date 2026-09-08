@@ -3,13 +3,12 @@
 //! Transcribed from `z80_python/_io.py`.
 
 use crate::core::{Bus, Z80};
+use crate::flags::{Flags, FLAG_C, SZP};
 
 impl<B: Bus> Z80<B> {
     pub(crate) fn in_flags(&mut self, value: u8) {
-        self.f.set_n(0);
-        self.f.set_h(0);
-        self.set_parity(value);
-        self.set_xysz(value);
+        // C is preserved; N = H = 0; S, Z, X, Y and parity from the byte.
+        self.f = Flags::new((self.f.byte() & FLAG_C) | SZP[usize::from(value)]);
     }
 
     /// IN A,(n) -- port address is A:n.

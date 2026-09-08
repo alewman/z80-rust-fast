@@ -3,6 +3,7 @@
 //! Transcribed from `z80_python/_loads.py`.
 
 use crate::core::{Bus, Z80};
+use crate::flags::{Flags, FLAG_C, FLAG_PV, SZP};
 
 impl<B: Bus> Z80<B> {
     /// LD r,r' -- includes the (HL) source and destination forms.
@@ -99,13 +100,12 @@ impl<B: Bus> Z80<B> {
     pub(crate) fn op_ld_a_i(&mut self) -> u32 {
         let value = self.i;
         self.a = value;
-        self.f.set_n(0);
-        self.f.set_h(0);
-        // PV reports IFF2, the only way software can read the interrupt-enable state.
-        self.f.set_pv(if self.iff2 { 1 } else { 0 });
-        self.f.set_xy(value);
-        self.f.set_s((value >> 7) & 1);
-        self.f.set_z(if value == 0 { 1 } else { 0 });
+        // C is preserved; N = H = 0; S, Z, X, Y from the value; PV reports
+        // IFF2, the only way software can read the interrupt-enable state.
+        let f = (self.f.byte() & FLAG_C)
+            | (SZP[usize::from(value)] & !FLAG_PV)
+            | if self.iff2 { FLAG_PV } else { 0 };
+        self.f = Flags::new(f);
         self.update_q(true);
         9
     }
@@ -114,13 +114,12 @@ impl<B: Bus> Z80<B> {
     pub(crate) fn op_ld_a_r(&mut self) -> u32 {
         let value = self.r;
         self.a = value;
-        self.f.set_n(0);
-        self.f.set_h(0);
-        // PV reports IFF2, the only way software can read the interrupt-enable state.
-        self.f.set_pv(if self.iff2 { 1 } else { 0 });
-        self.f.set_xy(value);
-        self.f.set_s((value >> 7) & 1);
-        self.f.set_z(if value == 0 { 1 } else { 0 });
+        // C is preserved; N = H = 0; S, Z, X, Y from the value; PV reports
+        // IFF2, the only way software can read the interrupt-enable state.
+        let f = (self.f.byte() & FLAG_C)
+            | (SZP[usize::from(value)] & !FLAG_PV)
+            | if self.iff2 { FLAG_PV } else { 0 };
+        self.f = Flags::new(f);
         self.update_q(true);
         9
     }

@@ -5,6 +5,7 @@
 //! `index_dispatch.rs` routes them and adds the prefix cost.
 
 use crate::core::{Bus, Z80};
+use crate::flags::{Flags, FLAG_C, FLAG_H, FLAG_PV, FLAG_S, FLAG_X, FLAG_Y, FLAG_Z};
 
 impl<B: Bus> Z80<B> {
     pub(crate) fn get_index(&self, prefix: u8) -> u16 {
@@ -51,13 +52,14 @@ impl<B: Bus> Z80<B> {
             self.read_pair(pair_index)
         };
         self.wz = index.wrapping_add(1);
-        let result = u32::from(index) + u32::from(value);
-        self.f.set_c(if result > 0xFFFF { 1 } else { 0 });
-        let result = result as u16;
-        self.f.set_n(0);
-        self.f
-            .set_h((((index ^ value ^ result) & 0x1000) >> 12) as u8);
-        self.f.set_xy((result >> 8) as u8);
+        let wide = u32::from(index) + u32::from(value);
+        let result = wide as u16;
+        // Only H, N, C and X/Y change; S, Z and PV are preserved.
+        let f = (self.f.byte() & (FLAG_S | FLAG_Z | FLAG_PV))
+            | ((result >> 8) as u8 & (FLAG_X | FLAG_Y))
+            | (((index ^ value ^ result) >> 8) as u8 & FLAG_H)
+            | ((wide >> 16) as u8 & FLAG_C);
+        self.f = Flags::new(f);
         self.set_index(prefix, result);
         self.update_q(true);
         15
@@ -367,14 +369,7 @@ impl<B: Bus> Z80<B> {
             .wrapping_add(displacement as i16 as u16);
         let value = self.bus.read_byte(self.wz);
         let bit_index = (sub_opcode >> 3) & 0x07;
-        let bit_set = (value >> bit_index) & 1;
-        self.f.set_n(0);
-        self.f.set_h(1);
-        self.f.set_z(if bit_set != 0 { 0 } else { 1 });
-        self.f.set_pv(self.f.z());
-        self.f
-            .set_s(if bit_index == 7 && bit_set != 0 { 1 } else { 0 });
-        self.f.set_xy((self.wz >> 8) as u8);
+        self.bit_flags(value, bit_index, (self.wz >> 8) as u8);
         self.update_q(true);
         20
     }

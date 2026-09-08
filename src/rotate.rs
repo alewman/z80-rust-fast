@@ -5,7 +5,7 @@
 #![allow(clippy::manual_rotate)]
 
 use crate::core::{Bus, Z80};
-use crate::flags::{Flags, FLAG_C, SZP};
+use crate::flags::{Flags, FLAG_C, FLAG_H, FLAG_PV, FLAG_S, FLAG_X, FLAG_Y, FLAG_Z, SZP};
 
 impl<B: Bus> Z80<B> {
     // The CB rotates and shifts write all eight flags: C is the bit shifted
@@ -99,24 +99,28 @@ impl<B: Bus> Z80<B> {
         8
     }
 
+    // The accumulator rotates change only C, N, H and X/Y; S, Z and PV are
+    // preserved.
+    fn acc_rot_flags(&mut self, carry: u8) {
+        let f = (self.f.byte() & (FLAG_S | FLAG_Z | FLAG_PV))
+            | (self.a & (FLAG_X | FLAG_Y))
+            | (carry & FLAG_C);
+        self.f = Flags::new(f);
+    }
+
     /// RLCA
     pub(crate) fn op_rlca(&mut self) -> u32 {
         self.a = (self.a << 1) | (self.a >> 7);
-        self.f.set_c(self.a & 1);
-        self.f.set_n(0);
-        self.f.set_h(0);
-        self.f.set_xy(self.a);
+        self.acc_rot_flags(self.a & 1);
         self.update_q(true);
         4
     }
 
     /// RRCA
     pub(crate) fn op_rrca(&mut self) -> u32 {
-        self.f.set_c(self.a & 1);
+        let carry = self.a & 1;
         self.a = (self.a >> 1) | (self.a << 7);
-        self.f.set_n(0);
-        self.f.set_h(0);
-        self.f.set_xy(self.a);
+        self.acc_rot_flags(carry);
         self.update_q(true);
         4
     }
@@ -124,11 +128,9 @@ impl<B: Bus> Z80<B> {
     /// RLA
     pub(crate) fn op_rla(&mut self) -> u32 {
         let carry_in = self.f.c();
-        self.f.set_c((self.a >> 7) & 1);
+        let carry = (self.a >> 7) & 1;
         self.a = (self.a << 1) | carry_in;
-        self.f.set_n(0);
-        self.f.set_h(0);
-        self.f.set_xy(self.a);
+        self.acc_rot_flags(carry);
         self.update_q(true);
         4
     }
@@ -136,13 +138,27 @@ impl<B: Bus> Z80<B> {
     /// RRA
     pub(crate) fn op_rra(&mut self) -> u32 {
         let carry_in = self.f.c();
-        self.f.set_c(self.a & 1);
+        let carry = self.a & 1;
         self.a = (self.a >> 1) | (carry_in << 7);
-        self.f.set_n(0);
-        self.f.set_h(0);
-        self.f.set_xy(self.a);
+        self.acc_rot_flags(carry);
         self.update_q(true);
         4
+    }
+
+    /// BIT's flags: C preserved; N = 0, H = 1; Z and PV set when the bit is
+    /// clear; S set only for bit 7 when it is set; X/Y from `xy_source`.
+    pub(crate) fn bit_flags(&mut self, value: u8, bit_index: u8, xy_source: u8) {
+        let bit_set = (value >> bit_index) & 1;
+        let f = (self.f.byte() & FLAG_C)
+            | FLAG_H
+            | if bit_set == 0 { FLAG_Z | FLAG_PV } else { 0 }
+            | if bit_index == 7 && bit_set != 0 {
+                FLAG_S
+            } else {
+                0
+            }
+            | (xy_source & (FLAG_X | FLAG_Y));
+        self.f = Flags::new(f);
     }
 
     /// BIT b,r -- includes BIT b,(HL).
@@ -158,14 +174,7 @@ impl<B: Bus> Z80<B> {
             let value = self.read_reg(src);
             (value, value, 8)
         };
-        let bit_set = (value >> bit_index) & 1;
-        self.f.set_n(0);
-        self.f.set_h(1);
-        self.f.set_z(if bit_set != 0 { 0 } else { 1 });
-        self.f.set_pv(self.f.z());
-        self.f
-            .set_s(if bit_index == 7 && bit_set != 0 { 1 } else { 0 });
-        self.f.set_xy(xy_source);
+        self.bit_flags(value, bit_index, xy_source);
         self.update_q(true);
         t_states
     }
@@ -213,10 +222,8 @@ impl<B: Bus> Z80<B> {
         let data = self.bus.read_byte(addr);
         self.bus.write_byte(addr, (data >> 4) | (self.a << 4));
         self.a = (self.a & 0xF0) | (data & 0x0F);
-        self.f.set_n(0);
-        self.f.set_h(0);
-        self.set_parity(self.a);
-        self.set_xysz(self.a);
+        // C is preserved; N = H = 0; the rest from A.
+        self.f = Flags::new((self.f.byte() & FLAG_C) | SZP[usize::from(self.a)]);
         self.update_q(true);
         18
     }
@@ -228,10 +235,8 @@ impl<B: Bus> Z80<B> {
         let data = self.bus.read_byte(addr);
         self.bus.write_byte(addr, (data << 4) | (self.a & 0x0F));
         self.a = (self.a & 0xF0) | (data >> 4);
-        self.f.set_n(0);
-        self.f.set_h(0);
-        self.set_parity(self.a);
-        self.set_xysz(self.a);
+        // C is preserved; N = H = 0; the rest from A.
+        self.f = Flags::new((self.f.byte() & FLAG_C) | SZP[usize::from(self.a)]);
         self.update_q(true);
         18
     }
