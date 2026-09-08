@@ -65,6 +65,7 @@ scripts/rung5.sh
 scripts/fetch_fuse_tests.sh            # FUSE 1.6.0 z80/tests into external/
 scripts/rung6.sh
 scripts/bench.sh                       # the speed number, pinned to one core
+target/release/z80-bench bench/ix-loop.json   # secondary workloads, see bench/README.md
 ```
 
 ## Speed
@@ -80,6 +81,7 @@ run may land on either).
 | --- | --- | --- | --- | --- |
 | `52192d1` | Baseline: the transcription as forked | 69.3 s (69.28, 69.39, 69.43) | 83.1 | 674 MHz |
 | `d27af51` | Main dispatch: one exhaustive `match` over the opcode byte, prefixes included, instead of the if-chain | 43.0 s (43.01, 42.98) | 134.1 | 1,087 MHz |
+| next | DD/FD dispatch: the same `match` shape for the byte after the prefix (no ZEXALL change; `bench/ix-loop.json` 3.86 s to 2.99 s) | 43.2 s (43.15, 43.21) | 133.5 | 1,082 MHz |
 
 z80-rust's README quotes 116 s for the same loop; that measurement was not
 pinned, and a 1,000,000,000-instruction slice of ZEXALL takes 11.96 s on
@@ -134,6 +136,11 @@ re-run clean on each.
    now one `match` over all 256 opcode bytes with no `_` arm, the CB/ED/
    DD/FD prefix tests folded in as arms, each arm calling the same handler
    with the same argument. `execute_cb` likewise. 69.3 s to 43.0 s.
+2. **DD/FD dispatch as a jump table.** `execute_index_opcode` was a
+   sixty-test if-chain; now one exhaustive `match`. ZEXALL has too few
+   prefixed instructions to move (43.2 s, within noise), so the change is
+   measured on `bench/ix-loop.json`, a loop of five IX instructions and a
+   JR: 3.86 s to 2.99 s, 78 to 100 M instructions/s.
 
 ## Using the core
 
