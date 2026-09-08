@@ -97,7 +97,8 @@ noise on one binary is about 0.2%.
 | `4f0dbe7` | ED dispatch: the same `match` for the byte after ED (`bench/ed-loop.json` 2.27 s to 2.04 s) | 47.1 s | 43.2 s (nf6; 43.6 nf5) | 133.3 |
 | `a19edfc` | Lifecycle requests as one byte: `step()` tests RESET, NMI, INT with one load and takes a cold path only when a line is up | 43.7 s | 40.6 s (nf6; 41.9 nf5) | 141.9 |
 | `60b843c` | Fetched bytes in an inline 8-byte buffer; a `Vec` only for prefix runs longer than that | 38.6 s | 38.6 s (default; 40.3 nf6, 41.4 nf5) | 149.2 |
-| next | Dispatch arms expanded to one per opcode with the opcode as a literal argument (`tools/expand_dispatch.py`) | 38.6 s | 37.8 s (nf5; 38.8 nf6) | 152.3 |
+| `94bd13a` | Dispatch arms expanded to one per opcode with the opcode as a literal argument (`tools/expand_dispatch.py`) | 38.6 s | 37.8 s (nf5; 38.8 nf6) | 152.3 |
+| next | `#[inline]` on the conformance host's `Bus` methods and the CP/M trap check, which were real calls from the binaries' crate on every read and every step | 21.3 s | 20.5 s (nf6; 22.3 nf5) | 281.0 |
 
 ### Profile of the baseline
 
@@ -181,6 +182,24 @@ re-run clean on each.
    38.6 s to 37.8 s; `ix-loop` 2.99 s to 2.42 s, `ed-loop` 2.04 s to
    about 1.8 s. The larger gain needs the handlers inlined so the literal
    folds, which is the next change.
+7. **Forcing the handlers inline was a regression (not committed).**
+   `#[inline(always)]` on the 28 opcode-parameterized handlers so the
+   literal would fold: `execute_main` grew to 5.8 KB and was no longer
+   inlined into `step`, and ZEXALL went from 37.8 s to 39.0 s, `ix-loop`
+   from 2.42 s to 2.76 s. Reverted; recorded so it is not tried again the
+   same way.
+8. **Inline the host.** The re-profile at `94bd13a` showed
+   `ConformanceHost::read_byte` (14.5%), `handle_cpm_trap` (13%) and
+   `write_byte` (3.5%) as *outlined* functions: they are non-generic
+   functions in the library crate, and the bench, `z80-trace`, and the
+   rung binaries are separate crates that cannot inline them without a
+   hint. Every memory read and every step was a call. `#[inline]` on the
+   four `Bus` methods and on the trap test (its BDOS body moved to a
+   `#[cold]` function) changes nothing the host does. 37.8 s to 20.5 s;
+   `ix-loop` 2.42 s to 1.77 s, `ed-loop` 1.8 s to 1.4 s; `z80-trace
+   --no-trace` over ZEXALL 151 s (z80-rust) to 128 s. A host in its own
+   crate never paid this, so the gain is real for the kit's binaries and
+   for the numbers in this table, but not for every embedding.
 
 ## Using the core
 
