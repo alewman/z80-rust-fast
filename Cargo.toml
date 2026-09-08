@@ -1,11 +1,11 @@
 [package]
-name = "z80-rust"
+name = "z80-rust-fast"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.85"
-description = "A Rust Z80 instruction core transcribed from, and proven equivalent to, z80-python"
+description = "A fast Rust Z80 core forked from z80-rust and kept provably equivalent to z80-python"
 license = "MIT"
-repository = "https://github.com/alewman/z80-rust"
+repository = "https://github.com/alewman/z80-rust-fast"
 publish = false
 
 [lib]
