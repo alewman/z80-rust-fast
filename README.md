@@ -79,7 +79,7 @@ run may land on either).
 | Commit | Change | ZEXALL wall time | M instructions/s | Equivalent Z80 clock |
 | --- | --- | --- | --- | --- |
 | `52192d1` | Baseline: the transcription as forked | 69.3 s (69.28, 69.39, 69.43) | 83.1 | 674 MHz |
-| next | Main dispatch: one exhaustive `match` over the opcode byte, prefixes included, instead of the if-chain | 43.0 s (43.01, 42.98) | 134.1 | 1,087 MHz |
+| `d27af51` | Main dispatch: one exhaustive `match` over the opcode byte, prefixes included, instead of the if-chain | 43.0 s (43.01, 42.98) | 134.1 | 1,087 MHz |
 
 z80-rust's README quotes 116 s for the same loop; that measurement was not
 pinned, and a 1,000,000,000-instruction slice of ZEXALL takes 11.96 s on
