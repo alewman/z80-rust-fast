@@ -1,17 +1,24 @@
-# z80-rust
+# z80-rust-fast
 
-A Rust Z80 instruction core transcribed from
-[z80-python](https://github.com/alewman/z80-python) and proven equivalent to
-it at every processor boundary: boundary kind, T-states, instruction bytes,
-and all of `CPUState`, not merely "passes ZEX at the end".
+A fast Rust Z80 instruction core, forked from
+[z80-rust](https://github.com/alewman/z80-rust) and kept provably equivalent
+to [z80-python](https://github.com/alewman/z80-python) at every processor
+boundary: boundary kind, T-states, instruction bytes, and all 28 `CpuState`
+fields.
 
-The module layout mirrors the reference so the two can be read side by
-side. Each `src/*.rs` file is the transcription of one `z80_python/*.py`
-module (`flags`, `state`, `core`, `alu`, `blocks`, `control`, `dispatch`,
-`index`, `index_dispatch`, `io`, `loads`, `rotate`, `cpu`), with the same
-handler names, the same explicit if-chain dispatch, and the hardware
-comments carried over. Nothing is redesigned; where a difference was forced
-by the language it is described in the module header.
+z80-rust is a module-for-module transcription of the reference, deliberately
+kept readable beside the Python and deliberately not fast. This repository
+starts from that transcription (commit `43c5122`, the first commit here that
+touches `src/`) and changes how the core does things without changing what
+it does. The conformance ladder is the definition of "what it does": a
+change that fails a rung is not an optimization, and every change is one
+commit with the measurement that justifies it.
+
+The library keeps the crate name `z80_rust`, so a host written for z80-rust
+(`use z80_rust::{Bus, Z80}`) compiles against this crate unchanged. The
+`Bus` trait, `Z80<B>`, `step()`, `capture_state()`/`restore_state()`, the
+lifecycle requests, and `Fault` are the frozen surface; so are the trace
+producer, the manifests, and the rung scripts.
 
 ## Certification
 
@@ -19,29 +26,29 @@ Pinned oracles, as `docs/conformance.md` in z80-python requires:
 
 | What | Version |
 | --- | --- |
-| z80-python (reference core and conformance kit) | 0.4.0.dev0 at commit `cab1598` (every rung; rung 3 was also run at `530cad3`) |
+| z80-python (reference core and conformance kit) | 0.4.0.dev0 at commit `cab1598` (the local checkout is `d1ec9c7`, whose instruction core is byte-identical: only `conformance.py` and `trace.py` differ) |
 | Trace schema | version 1 |
 | SingleStepTests/z80 corpus | revision `ebe1875d48f374bcfd4b505d8eb8ee751568b5f7` |
 | raxoft/z80test | release 1.2a |
 | FUSE Z80 core tests | release 1.6.0 (`fuse-1.6.0.tar.gz`, SHA-256 `3a8fedf2…047096`) |
 
-Ladder status at this commit, each rung reproduced with the script named
-(`scripts/`) on Linux x86_64 with rustc 1.93.1, CPython 3.14.4 and PyPy
-7.3.20 / Python 3.11.13:
+Ladder status, each rung reproduced with the script named (`scripts/`) on
+Linux x86_64 (i9-13900K) with rustc 1.93.1, CPython 3.14.4 and PyPy 7.3.20:
 
-| Rung | What | Result | Script |
-| --- | --- | --- | --- |
-| 1 | All three example manifests diff clean against the reference | `flags-and-branches`, `interrupts`, `prefix-sequences`: `traces are identical` | `rung1.sh` |
-| 2 | SingleStepTests, 1,604 files: registers, RAM, port order, T-states | `TOTAL: 1604000 passed, 0 failed, 0 not implemented / 1604000 cases` | `rung2.sh` |
-| 3 | ZEXALL and ZEXDOC diffed in lockstep against the reference (`cpm-minimal`), 116 segments of 50,000,000 records each | `zexall: every segment identical` and `zexdoc: every segment identical`: 5,764,169,474 records and 46,734,975,782 T-states each, stopped on `cpm_exit`. At `cab1598`: 6 h 58 min and 6 h 43 min wall with 30 PyPy processes (at `530cad3`: 6 h 55 min and 7 h 11 min) | `rung3.sh` |
-| 4 | z80test natively: `z80full`, `z80ccf`, `z80memptr` | all three `Result: all tests passed.` | `rung4.sh` |
-| 5 | The ten interrupt scenarios of `validation/interrupt_crosscheck.py` as manifests with events (now shipped upstream in `examples/conformance/interrupts/`) | all ten `traces are identical` | `rung5.sh` |
-| 6 | FUSE 1.6.0's Z80 core test set, 1,356 emulator-derived cases, with the six divergences z80-python explains pinned as strict expected failures | `1350 agree, 6 expected divergences, 0 unexpected` | `rung6.sh` |
+| Rung | What | Result | Last run at | Script |
+| --- | --- | --- | --- | --- |
+| 1 | The three example manifests diff clean against the reference | `traces are identical` ×3 | `52192d1` | `rung1.sh` |
+| 2 | SingleStepTests, 1,604 files | `TOTAL: 1604000 passed, 0 failed, 0 not implemented / 1604000 cases` | `52192d1` | `rung2.sh` |
+| 3 | ZEXALL and ZEXDOC in lockstep against the reference, 116 segments each | `every segment identical`, 5,764,169,474 records each | z80-rust `43c5122`; the instruction modules are unchanged since. Re-run before the first tag and after any change to dispatch or block instructions | `rung3.sh` |
+| 4 | z80test natively: `z80full`, `z80ccf`, `z80memptr` | all three `Result: all tests passed.` | `52192d1` | `rung4.sh` |
+| 5 | The ten interrupt scenarios as manifests with events | all ten `traces are identical` | `52192d1` | `rung5.sh` |
+| 6 | FUSE 1.6.0's core test set, 1,356 cases, six explained divergences pinned | `1350 agree, 6 expected divergences, 0 unexpected` | `52192d1` | `rung6.sh` |
 
-CI (`.github/workflows/ci.yml`) reproduces rungs 1, 2, 5, and 6 on every push, plus
-`cargo fmt --check`, `cargo clippy -D warnings`, and `cargo test` (which
-replays the two example manifests against copies of the reference traces
-without needing Python).
+Rungs 1, 2, 4, 5, and 6 are re-run on every optimization commit; the commit
+message carries the bench number before and after. CI
+(`.github/workflows/ci.yml`) reproduces rungs 1, 2, 5, and 6 on every push,
+builds the core without `std`, and runs `cargo fmt --check`, `cargo clippy
+-D warnings`, and `cargo test`.
 
 ### Reproducing
 
@@ -57,16 +64,68 @@ scripts/rung4.sh path/to/z80test-1.2a   # directory holding the .tap files
 scripts/rung5.sh
 scripts/fetch_fuse_tests.sh            # FUSE 1.6.0 z80/tests into external/
 scripts/rung6.sh
+scripts/bench.sh                       # the speed number, pinned to one core
 ```
 
-Rung 3 runs the reference at a few tens of thousands of records per second
-against billions of records, so `rung3.sh` splits the run into segments:
-`z80-trace --checkpoint-every N` writes a manifest every N records holding
-the full memory image and every `CpuState` field, and the segments are
-diffed in parallel. Each segment starts from the state the previous one
-ended in, so a divergence anywhere is reported by the segment holding it,
-and a clean result on every segment is a clean result for the whole run.
-`SEGMENT=0 JOBS=1` runs the single unsegmented pipe instead.
+## Speed
+
+The measure is `z80-bench`: a plain `step()` loop over ZEXALL with the
+`cpm-minimal` traps, no trace records and no state capture, 5,764,169,474
+instructions and 46,734,975,782 T-states. `scripts/bench.sh` builds release
+and runs it pinned to one logical CPU (`CPU`, default 4, a P-core on the
+i9-13900K; the E-cores are about 1.45× slower on this loop and an unpinned
+run may land on either).
+
+| Commit | Change | ZEXALL wall time | M instructions/s | Equivalent Z80 clock |
+| --- | --- | --- | --- | --- |
+| `52192d1` | Baseline: the transcription as forked | 69.3 s (69.28, 69.39, 69.43) | 83.1 | 674 MHz |
+
+z80-rust's README quotes 116 s for the same loop; that measurement was not
+pinned, and a 1,000,000,000-instruction slice of ZEXALL takes 11.96 s on
+P-core 4, 12.05 s unpinned, and 17.35 s on E-core 20 here, so the two are
+not comparable and every number in this table is taken the pinned way.
+
+Build profile: `cargo`'s default release profile with `debug = 1` for
+symbols; no LTO, no `target-cpu`, no PGO yet. Build-profile changes come
+last because they move every earlier number.
+
+### Profile of the baseline
+
+`perf` is not available on the build machine (`perf_event_paranoid` = 4),
+so `tools/sample-profile.py` samples the instruction pointer of the running
+bench over ptrace at 2 ms and attributes each sample with `nm` and
+`addr2line -i`. A full ZEXALL run under it (33,840 samples, 813 distinct
+addresses) at `52192d1`:
+
+| Self time | Innermost inlined frame | What it is |
+| --- | --- | --- |
+| 22.2% | `execute_main` | the if-chain over the unprefixed opcode |
+| 12.8% | `handle_cpm_trap` | the two PC compares in the bench loop (inlined into `main`) |
+| 10.8% | `step` | reset/NMI/INT checks, `halted`, `ei_delay` |
+| 8.3% | `z80_bench::main` | the loop itself |
+| 7.9% | `usize::from(u16)` | the memory index in `read_byte`, i.e. the load and its bounds check |
+| 3.8% | `read_operand_byte` | |
+| 3.8% | `ConformanceHost::read_byte` | |
+| 2.6% | `op_ld_r_r` | |
+| 2.4% | `decode_and_execute` | the prefix tests before `execute_main` |
+| 2.1% | `Vec::push` | `note_fetched`, the per-byte trace bookkeeping |
+| 2.0% | `can_accept_maskable_interrupt` | |
+| 1.4% each | `pop_word`, `read_pair`, `fetch_byte`, `push_word`, `inc_r` | |
+
+By outlined function, `step` holds 43.9% (nearly every handler is inlined
+into it), `handle_cpm_trap` 12.8%, `read_byte` 11.1%, `main` 8.3%,
+`read_operand_word` 5.5%, `op_ld_r_r` 2.9%, `alu_a` 2.1%. The flag setters
+are individually small (`set_h` 0.6%, `set_z` 0.4%) but are spread over
+every ALU handler.
+
+What this says: dispatch shape first (the if-chain and the prefix tests are
+a quarter of the time), then the per-step lifecycle checks, then the
+fetched-bytes bookkeeping; the flag computation is diffuse and comes after.
+
+### Optimizations
+
+None yet. Each one will be a row above and a commit whose message states
+what the profile showed, what changed, and the number before and after.
 
 ## Using the core
 
@@ -93,74 +152,47 @@ maskable interrupt before fetching, exactly as the reference's `step()`
 does; `request_*` / `clear_*` are the lifecycle API; `capture_state()` and
 `restore_state()` move the complete processor state. `step()` returns
 `Err(Fault)` in exactly the situation where the reference raises
-`NotImplementedError` (IM 0 with a non-RST vector byte, below) and leaves
-the state as the reference leaves it.
+`NotImplementedError` (IM 0 with a non-RST vector byte) and leaves the
+state as the reference leaves it.
+
+### Features
+
+- `std` (default): the trace producer (`trace`), the conformance kit
+  (`conformance`), serde, the binaries, and the rung 1 test.
+- Without it (`cargo build --no-default-features`) the crate is `no_std`
+  plus `alloc` and contains the instruction core alone, for the WebAssembly
+  build that follows this project.
+
+### Binaries
+
+- `z80-bench [manifest] [--limit N] [--show-output]`: the speed measure above.
+- `z80-trace <manifest>`: run a conformance manifest and stream its trace
+  (`docs/trace-schema.md` in z80-python) to stdout or `--out`;
+  `--checkpoint-every N` splits a long run into resumable segments.
+- `z80-vectors <dir>`: the SingleStepTests runner (rung 2).
+- `z80-z80test <tap>...`: the z80test runner (rung 4).
+- `z80-fuse <dir>`: the FUSE core-test runner (rung 6).
 
 ## Stated limitations
 
-- **IM 0 accepts only the eight RST opcodes.** A real device can put any
-  instruction on the bus in interrupt mode 0, and a multi-byte one is
-  fetched from the bus over further acknowledge cycles. Both cores stop with
-  an error for a non-RST byte and leave the request pending. No oracle in
-  the ladder exercises non-RST IM 0 (SingleStepTests, z80test, ZEX, and FUSE
-  all skip it), and supporting it changes the shape of the pending-request
-  field and therefore the trace schema, so it stays a stated limitation
-  until a target machine needs it. Same as the reference,
-  `docs/interrupt-lifecycle.md`.
+Inherited from the reference and z80-rust, unchanged:
+
+- **IM 0 accepts only the eight RST opcodes.** Both parent cores stop with
+  an error for a non-RST byte and leave the request pending; no oracle in
+  the ladder exercises it, and supporting it changes the trace schema.
 - Bus-level timing, memory contention, WAIT states, interrupt-acknowledge
-  callbacks, and daisy chains are outside both cores' claims, as
-  `docs/conformance.md` in the reference says.
-
-Binaries:
-
-- `z80-trace <manifest>`: run a conformance manifest and stream its trace
-  (`docs/trace-schema.md`) to stdout or `--out`.
-- `z80-vectors <dir>`: the SingleStepTests runner.
-- `z80-z80test <tap>...`: the z80test runner.
-- `z80-fuse <dir>`: the FUSE core-test runner (rung 6). FUSE's expectations
-  are emulator-derived; six cases disagree with the hardware-derived
-  oracles, for reasons z80-python's `docs/validation.md` records, and the
-  runner requires exactly those six to diverge.
-
-## Prefix runs
-
-At `cab1598` the reference gained hardware-faithful handling of runs of
-DD/FD prefixes and of DD/FD before ED ([z80-python#5](https://github.com/alewman/z80-python/pull/5):
-each stray prefix is a 4-T-state M1 that bumps R, the last one decides IX or
-IY, an ED after a prefix runs the ED instruction unchanged, and no interrupt
-is accepted inside the run). `src/index_dispatch.rs` transcribes it, and the
-bytes an instruction occupies are now unbounded, since the run is. The rule
-is documentation-derived (Sean Young, *The Undocumented Z80 Documented*
-v0.91, sections 3.7 and 6.1, chapter 5) and has no hardware-captured vector;
-z80-python's `docs/validation.md` states that tier, and this port inherits
-it. `Fault::UnhandledIndexOpcode` is now unreachable and kept only as the
-table's completeness guard.
-
-## Notes for the reference
-
-Three things this port turned up went upstream and are merged:
-[z80-python#3](https://github.com/alewman/z80-python/pull/3) (`CPUState` has
-28 fields where the docs said 29, and the interrupt-scenario manifests in
-`conformance/interrupts/` shipped as `examples/conformance/interrupts/` with
-their reference traces), [#4](https://github.com/alewman/z80-python/pull/4)
-(the reference's CI workflow had failed to parse since before this work), and
-[#5](https://github.com/alewman/z80-python/pull/5) (prefix runs, above).
+  callbacks, and daisy chains are outside every core's claims.
 
 ## Where the brief is
 
 [docs/handoff-brief.md](docs/handoff-brief.md) is the prompt this
-repository was built from, verbatim, and [docs/build-record.md](docs/build-record.md)
-is what happened when it was run.
-
-## Speed
-
-A plain `step()` loop over ZEXALL with the `cpm-minimal` traps (no trace
-records, no state capture) runs the 5,764,169,474 instructions in 116 s on
-one core of an i9-13900K: about 50 million instructions per second, or a
-400 MHz Z80. `z80-trace --no-trace`, which also captures the state before
-and after every boundary, takes 151 s.
+repository is built from, verbatim, and [docs/build-record.md](docs/build-record.md)
+is what happened when it was run. The transcription's own brief and record
+are [docs/z80-rust-handoff-brief.md](docs/z80-rust-handoff-brief.md) and
+[docs/z80-rust-build-record.md](docs/z80-rust-build-record.md).
 
 ## License
 
-MIT, like the reference. The SingleStepTests corpus (MIT), the ZEX
-exercisers (GPL-2.0), and z80test (MIT) are external and not bundled.
+MIT, like both parents. The SingleStepTests corpus (MIT), the ZEX
+exercisers (GPL-2.0), z80test (MIT), and FUSE's tests (GPL-2.0) are
+external and not bundled.
