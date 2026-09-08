@@ -13,6 +13,30 @@ pub const FLAG_PV: u8 = 0b0000_0100;
 pub const FLAG_N: u8 = 0b0000_0010;
 pub const FLAG_C: u8 = 0b0000_0001;
 
+/// S, Z, X, Y, and PV-as-parity for every 8-bit result: the flags that
+/// depend only on the result byte, ready to OR with the ones that do not.
+/// `SZP[v] & !FLAG_PV` is the same without parity, for the arithmetic
+/// operations whose PV is overflow.
+pub const SZP: [u8; 256] = build_szp();
+
+const fn build_szp() -> [u8; 256] {
+    let mut table = [0u8; 256];
+    let mut value = 0usize;
+    while value < 256 {
+        let byte = value as u8;
+        let mut flags = byte & (FLAG_S | FLAG_X | FLAG_Y);
+        if byte == 0 {
+            flags |= FLAG_Z;
+        }
+        if (byte.count_ones() & 1) == 0 {
+            flags |= FLAG_PV;
+        }
+        table[value] = flags;
+        value += 1;
+    }
+    table
+}
+
 /// The Z80 F register, including the undocumented X/Y bits.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Flags {

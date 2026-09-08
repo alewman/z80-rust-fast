@@ -98,7 +98,8 @@ noise on one binary is about 0.2%.
 | `a19edfc` | Lifecycle requests as one byte: `step()` tests RESET, NMI, INT with one load and takes a cold path only when a line is up | 43.7 s | 40.6 s (nf6; 41.9 nf5) | 141.9 |
 | `60b843c` | Fetched bytes in an inline 8-byte buffer; a `Vec` only for prefix runs longer than that | 38.6 s | 38.6 s (default; 40.3 nf6, 41.4 nf5) | 149.2 |
 | `94bd13a` | Dispatch arms expanded to one per opcode with the opcode as a literal argument (`tools/expand_dispatch.py`) | 38.6 s | 37.8 s (nf5; 38.8 nf6) | 152.3 |
-| next | `#[inline]` on the conformance host's `Bus` methods and the CP/M trap check, which were real calls from the binaries' crate on every read and every step | 21.3 s | 20.5 s (nf6; 22.3 nf5) | 281.0 |
+| `dc1e28b` | `#[inline]` on the conformance host's `Bus` methods and the CP/M trap check, which were real calls from the binaries' crate on every read and every step | 21.3 s | 20.5 s (nf6; 22.3 nf5) | 281.0 |
+| next | 8-bit ALU and CB rotate flags composed as one byte from a compile-time S/Z/X/Y/parity table instead of five to seven setter calls | 20.0 s | 19.8 s (nf6 19.75, nf5 19.76) | 291.8 |
 
 ### Profile of the baseline
 
@@ -199,7 +200,19 @@ re-run clean on each.
    `ix-loop` 2.42 s to 1.77 s, `ed-loop` 1.8 s to 1.4 s; `z80-trace
    --no-trace` over ZEXALL 151 s (z80-rust) to 128 s. A host in its own
    crate never paid this, so the gain is real for the kit's binaries and
-   for the numbers in this table, but not for every embedding.
+   for the numbers in this table, but not for every embedding. For a
+   core-only comparison the baseline `52192d1` was re-measured with the
+   same two attributes applied: 47.7 s default, **40.1 s** min over
+   layouts (nf6; 42.1 nf5). Against that, the core changes alone are
+   40.1 s to 20.5 s at this row.
+9. **Flags as one byte.** `add`, `sub`, `cp`, `and`, `or`, `xor`, `inc`,
+   `dec` and the eight CB rotates/shifts each wrote F through five to
+   seven `Flags` setters (read-modify-write each, plus a three-step parity
+   fold). Each now builds F in one expression: a `const` table `SZP[256]`
+   holds S, Z, X, Y and parity for every result byte, and C, H, N and
+   overflow are ORed in. Every primitive still writes exactly the flags
+   the setter sequence wrote and preserves the rest (`inc`/`dec` keep C).
+   Rung 2's 1,604,000 vectors and z80full are the check. 20.5 s to 19.8 s.
 
 ## Using the core
 

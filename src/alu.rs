@@ -3,6 +3,7 @@
 //! Transcribed from `z80_python/_alu.py`.
 
 use crate::core::{Bus, Z80};
+use crate::flags::{Flags, FLAG_C, FLAG_H, FLAG_N, FLAG_PV, FLAG_X, FLAG_Y, SZP};
 
 impl<B: Bus> Z80<B> {
     pub(crate) fn set_sz(&mut self, value: u8) {
@@ -31,86 +32,93 @@ impl<B: Bus> Z80<B> {
         self.f.set_pv(Self::parity(value));
     }
 
+    // The eight-bit primitives write F as one byte: the result-only flags
+    // (S, Z, X, Y, and parity where PV is parity) come from the SZP table
+    // and the rest are computed bits. Each writes exactly the flags the
+    // reference's setter sequence wrote and preserves the ones it did not.
+
     pub(crate) fn add(&mut self, x: u8, y: u8, carry: u8) -> u8 {
-        let z = u16::from(x) + u16::from(y) + u16::from(carry);
-        self.f.set_c(if z > 0xFF { 1 } else { 0 });
-        let z = z as u8;
-        self.f.set_n(0);
-        self.f.set_pv((((x ^ y) ^ 0xFF) & (x ^ z) & 0x80) >> 7);
-        self.f.set_h(((x ^ y ^ z) & 0x10) >> 4);
-        self.set_xysz(z);
+        let wide = u16::from(x) + u16::from(y) + u16::from(carry);
+        let z = wide as u8;
+        // All eight flags: C from bit 8, N = 0, PV = overflow, H = half carry.
+        let f = (SZP[usize::from(z)] & !FLAG_PV)
+            | ((wide >> 8) as u8 & FLAG_C)
+            | (((x ^ y ^ 0xFF) & (x ^ z) & 0x80) >> 5)
+            | ((x ^ y ^ z) & FLAG_H);
+        self.f = Flags::new(f);
         z
     }
 
     pub(crate) fn sub(&mut self, x: u8, y: u8, carry: u8) -> u8 {
-        let z = (i32::from(x) - i32::from(y) - i32::from(carry)) & 0x1FF;
-        self.f.set_c(if z > 0xFF { 1 } else { 0 });
-        let z = z as u8;
-        self.f.set_n(1);
-        self.f.set_pv(((x ^ y) & (x ^ z) & 0x80) >> 7);
-        self.f.set_h(((x ^ y ^ z) & 0x10) >> 4);
-        self.set_xysz(z);
+        let wide = (u16::from(x))
+            .wrapping_sub(u16::from(y))
+            .wrapping_sub(u16::from(carry));
+        let z = wide as u8;
+        // All eight flags: C = borrow (bit 8 of the 9-bit difference), N = 1.
+        let f = (SZP[usize::from(z)] & !FLAG_PV)
+            | ((wide >> 8) as u8 & FLAG_C)
+            | FLAG_N
+            | (((x ^ y) & (x ^ z) & 0x80) >> 5)
+            | ((x ^ y ^ z) & FLAG_H);
+        self.f = Flags::new(f);
         z
     }
 
     pub(crate) fn and(&mut self, x: u8, y: u8) -> u8 {
         let z = x & y;
-        self.f.set_c(0);
-        self.f.set_n(0);
-        self.set_parity(z);
-        self.f.set_h(1);
-        self.set_xysz(z);
+        // All eight flags: C = N = 0, H = 1, PV = parity.
+        self.f = Flags::new(SZP[usize::from(z)] | FLAG_H);
         z
     }
 
     pub(crate) fn or(&mut self, x: u8, y: u8) -> u8 {
         let z = x | y;
-        self.f.set_c(0);
-        self.f.set_n(0);
-        self.f.set_h(0);
-        self.set_parity(z);
-        self.set_xysz(z);
+        // All eight flags: C = N = H = 0, PV = parity.
+        self.f = Flags::new(SZP[usize::from(z)]);
         z
     }
 
     pub(crate) fn xor(&mut self, x: u8, y: u8) -> u8 {
         let z = x ^ y;
-        self.f.set_c(0);
-        self.f.set_n(0);
-        self.f.set_h(0);
-        self.set_parity(z);
-        self.set_xysz(z);
+        // All eight flags: C = N = H = 0, PV = parity.
+        self.f = Flags::new(SZP[usize::from(z)]);
         z
     }
 
     pub(crate) fn cp(&mut self, x: u8, y: u8) {
-        let z = (i32::from(x) - i32::from(y)) & 0x1FF;
-        self.f.set_c(if z > 0xFF { 1 } else { 0 });
-        let z = z as u8;
-        self.f.set_n(1);
-        // CP is a discarded SUB: X/Y sample the operand still on the internal bus,
-        // not the thrown-away result.
-        self.f.set_xy(y);
-        self.set_sz(z);
-        self.f.set_pv(((x ^ y) & (x ^ z) & 0x80) >> 7);
-        self.f.set_h(((x ^ y ^ z) & 0x10) >> 4);
+        let wide = (u16::from(x)).wrapping_sub(u16::from(y));
+        let z = wide as u8;
+        // All eight flags, like sub, except that CP is a discarded SUB: X/Y
+        // sample the operand still on the internal bus, not the result.
+        let f = (SZP[usize::from(z)] & !(FLAG_PV | FLAG_X | FLAG_Y))
+            | (y & (FLAG_X | FLAG_Y))
+            | ((wide >> 8) as u8 & FLAG_C)
+            | FLAG_N
+            | (((x ^ y) & (x ^ z) & 0x80) >> 5)
+            | ((x ^ y ^ z) & FLAG_H);
+        self.f = Flags::new(f);
     }
 
     pub(crate) fn inc(&mut self, x: u8) -> u8 {
         let z = x.wrapping_add(1);
-        self.f.set_n(0);
-        self.f.set_pv(if z == 0x80 { 1 } else { 0 });
-        self.set_xysz(z);
-        self.f.set_h(if (z & 0x0F) == 0 { 1 } else { 0 });
+        // C is preserved; N = 0; PV = overflow into 0x80; H = low nibble carried.
+        let f = (self.f.byte() & FLAG_C)
+            | (SZP[usize::from(z)] & !FLAG_PV)
+            | if z == 0x80 { FLAG_PV } else { 0 }
+            | if (z & 0x0F) == 0 { FLAG_H } else { 0 };
+        self.f = Flags::new(f);
         z
     }
 
     pub(crate) fn dec(&mut self, x: u8) -> u8 {
         let z = x.wrapping_sub(1);
-        self.f.set_n(1);
-        self.f.set_pv(if z == 0x7F { 1 } else { 0 });
-        self.set_xysz(z);
-        self.f.set_h(if (z & 0x0F) == 0x0F { 1 } else { 0 });
+        // C is preserved; N = 1; PV = overflow from 0x80; H = low nibble borrowed.
+        let f = (self.f.byte() & FLAG_C)
+            | (SZP[usize::from(z)] & !FLAG_PV)
+            | FLAG_N
+            | if z == 0x7F { FLAG_PV } else { 0 }
+            | if (z & 0x0F) == 0x0F { FLAG_H } else { 0 };
+        self.f = Flags::new(f);
         z
     }
 
