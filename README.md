@@ -99,7 +99,8 @@ noise on one binary is about 0.2%.
 | `60b843c` | Fetched bytes in an inline 8-byte buffer; a `Vec` only for prefix runs longer than that | 38.6 s | 38.6 s (default; 40.3 nf6, 41.4 nf5) | 149.2 |
 | `94bd13a` | Dispatch arms expanded to one per opcode with the opcode as a literal argument (`tools/expand_dispatch.py`) | 38.6 s | 37.8 s (nf5; 38.8 nf6) | 152.3 |
 | `dc1e28b` | `#[inline]` on the conformance host's `Bus` methods and the CP/M trap check, which were real calls from the binaries' crate on every read and every step | 21.3 s | 20.5 s (nf6; 22.3 nf5) | 281.0 |
-| next | 8-bit ALU and CB rotate flags composed as one byte from a compile-time S/Z/X/Y/parity table instead of five to seven setter calls | 20.0 s | 19.8 s (nf6 19.75, nf5 19.76) | 291.8 |
+| `653281c` | 8-bit ALU and CB rotate flags composed as one byte from a compile-time S/Z/X/Y/parity table instead of five to seven setter calls | 20.0 s | 19.8 s (nf6 19.75, nf5 19.76) | 291.8 |
+| next | The remaining flag writers the same way: ADC/SBC HL, ADD HL/IX/IY, RLCA/RRCA/RLA/RRA, BIT, IN r,(C), RRD/RLD, LD A,I/R (no measurable ZEXALL change) | 20.5 s | 19.7 s (nf6 19.69, nf5 19.72) | 292.8 |
 
 ### Profile of the baseline
 
@@ -213,6 +214,12 @@ re-run clean on each.
    overflow are ORed in. Every primitive still writes exactly the flags
    the setter sequence wrote and preserves the rest (`inc`/`dec` keep C).
    Rung 2's 1,604,000 vectors and z80full are the check. 20.5 s to 19.8 s.
+10. **The rest of the flag writers.** `add16`/`sub16`, `ADD HL,rr` and
+    `ADD IX/IY,rr` (which preserve S, Z, PV), the accumulator rotates
+    (same), `BIT` (preserves C), `IN r,(C)`, `RRD`/`RLD`, and `LD A,I`/
+    `LD A,R` (preserve C) composed the same way. ZEXALL barely runs them:
+    19.75 s to 19.69 s, within noise. Done for consistency, so every F
+    write in the core is one assignment with its preserved bits named.
 
 ## Using the core
 

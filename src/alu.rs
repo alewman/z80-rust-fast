@@ -3,7 +3,7 @@
 //! Transcribed from `z80_python/_alu.py`.
 
 use crate::core::{Bus, Z80};
-use crate::flags::{Flags, FLAG_C, FLAG_H, FLAG_N, FLAG_PV, FLAG_X, FLAG_Y, SZP};
+use crate::flags::{Flags, FLAG_C, FLAG_H, FLAG_N, FLAG_PV, FLAG_S, FLAG_X, FLAG_Y, FLAG_Z, SZP};
 
 impl<B: Bus> Z80<B> {
     pub(crate) fn set_sz(&mut self, value: u8) {
@@ -280,31 +280,34 @@ impl<B: Bus> Z80<B> {
         4
     }
 
+    // ADC/SBC HL,rr write all eight flags: C from bit 16, H from bit 12,
+    // PV = 16-bit overflow, S/X/Y from the high byte, Z from the whole word.
     pub(crate) fn add16(&mut self, x: u16, y: u16, carry: u8) -> u16 {
-        let result = u32::from(x) + u32::from(y) + u32::from(carry);
-        self.f.set_c(if result > 0xFFFF { 1 } else { 0 });
-        let result = result as u16;
-        self.f.set_n(0);
-        self.f.set_h((((x ^ y ^ result) & 0x1000) >> 12) as u8);
-        self.f
-            .set_pv(((((x ^ y) ^ 0xFFFF) & (x ^ result) & 0x8000) >> 15) as u8);
-        self.f.set_s(((result >> 15) & 1) as u8);
-        self.f.set_z(if result == 0 { 1 } else { 0 });
-        self.f.set_xy((result >> 8) as u8);
+        let wide = u32::from(x) + u32::from(y) + u32::from(carry);
+        let result = wide as u16;
+        let high = (result >> 8) as u8;
+        let f = (high & (FLAG_S | FLAG_X | FLAG_Y))
+            | if result == 0 { FLAG_Z } else { 0 }
+            | (((x ^ y ^ result) >> 8) as u8 & FLAG_H)
+            | ((((x ^ y ^ 0xFFFF) & (x ^ result)) >> 13) as u8 & FLAG_PV)
+            | ((wide >> 16) as u8 & FLAG_C);
+        self.f = Flags::new(f);
         result
     }
 
     pub(crate) fn sub16(&mut self, x: u16, y: u16, carry: u8) -> u16 {
-        let result = i32::from(x) - i32::from(y) - i32::from(carry);
-        self.f.set_c(if result < 0 { 1 } else { 0 });
-        let result = result as u16;
-        self.f.set_n(1);
-        self.f.set_h((((x ^ y ^ result) & 0x1000) >> 12) as u8);
-        self.f
-            .set_pv((((x ^ y) & (x ^ result) & 0x8000) >> 15) as u8);
-        self.f.set_s(((result >> 15) & 1) as u8);
-        self.f.set_z(if result == 0 { 1 } else { 0 });
-        self.f.set_xy((result >> 8) as u8);
+        let wide = u32::from(x)
+            .wrapping_sub(u32::from(y))
+            .wrapping_sub(u32::from(carry));
+        let result = wide as u16;
+        let high = (result >> 8) as u8;
+        let f = (high & (FLAG_S | FLAG_X | FLAG_Y))
+            | if result == 0 { FLAG_Z } else { 0 }
+            | (((x ^ y ^ result) >> 8) as u8 & FLAG_H)
+            | ((((x ^ y) & (x ^ result)) >> 13) as u8 & FLAG_PV)
+            | ((wide >> 16) as u8 & FLAG_C)
+            | FLAG_N;
+        self.f = Flags::new(f);
         result
     }
 
@@ -315,12 +318,14 @@ impl<B: Bus> Z80<B> {
         let value = self.read_pair(pair_index);
         // 16-bit adds run through the address latch: WZ = HL + 1 (the high-byte pass).
         self.wz = hl.wrapping_add(1);
-        let result = u32::from(hl) + u32::from(value);
-        self.f.set_c(if result > 0xFFFF { 1 } else { 0 });
-        let result = result as u16;
-        self.f.set_n(0);
-        self.f.set_h((((hl ^ value ^ result) & 0x1000) >> 12) as u8);
-        self.f.set_xy((result >> 8) as u8);
+        let wide = u32::from(hl) + u32::from(value);
+        let result = wide as u16;
+        // Only H, N, C and X/Y change; S, Z and PV are preserved.
+        let f = (self.f.byte() & (FLAG_S | FLAG_Z | FLAG_PV))
+            | ((result >> 8) as u8 & (FLAG_X | FLAG_Y))
+            | (((hl ^ value ^ result) >> 8) as u8 & FLAG_H)
+            | ((wide >> 16) as u8 & FLAG_C);
+        self.f = Flags::new(f);
         self.write_pair(2, result);
         self.update_q(true);
         11
