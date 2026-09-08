@@ -43,17 +43,34 @@ transcription this repository forks has its own record in
   22% of self time, the bench loop and its trap compares 21%, `step`'s
   lifecycle checks 11%, the memory index 8%, `note_fetched` 2%. The
   table is in the README.
-- **07:55 to 08:20, dispatch shape** (d27af51, 5814b1f). `execute_main`
+- **07:46 to 07:50, dispatch shape** (d27af51, 5814b1f). `execute_main`
   and `execute_index_opcode` as exhaustive matches. ZEXALL 69.3 s to 43.0 s
   on the first; the second moved only an IX loop (`bench/ix-loop.json`,
   3.86 s to 2.99 s).
-- **08:20 to 09:05, the layout finding.** The ED dispatcher as a match
-  made its own loop 10% faster and ZEXALL 9% slower (43.2 s to 47.1 s).
-  The `step()` code was byte-identical in both binaries; it had moved
-  0x5e0 bytes because the ED function shrank. Aligning branch-target
+- **07:50 to 08:08, the layout finding** (4f0dbe7). The ED dispatcher as
+  a match made its own loop 10% faster and ZEXALL 9% slower (43.2 s to
+  47.1 s). The `step()` code was byte-identical in both binaries; it had
+  moved 0x5e0 bytes because the ED function shrank. Aligning branch-target
   blocks (`-C llvm-args=-align-all-nofallthru-blocks=5` or `=6`) brought
   the two builds within 1-3% of each other in both directions; aligning
   whole functions to 64 bytes did not. `scripts/bench.sh` now builds the
   default and the two aligned layouts and reports the minimum, and the
   three earlier commits were re-measured that way in a worktree so the
-  table is one measure throughout.
+  table is one measure throughout (baseline 60.1 s, not 69.3 s, on that
+  measure).
+- **08:11, lifecycle lines as one byte** (a19edfc): 43.2 s to 40.6 s.
+- **08:14, fetched bytes inline** (60b843c): 40.6 s to 38.6 s, with
+  `tests/fetched_bytes.rs` for the spill path no manifest reaches.
+- **08:17, one arm per opcode** (94bd13a): 37.8 s. Forcing the handlers
+  inline on top of it was tried and reverted (39.0 s).
+- **08:25, the host was never inlined** (dc1e28b). The re-profile showed
+  `read_byte` and `handle_cpm_trap` as outlined functions: the binaries
+  are separate crates. `#[inline]` on them: 37.8 s to 20.5 s. The baseline
+  re-measured with the same attributes is 40.1 s, the core-only reference
+  point.
+- **08:29 and 08:33, flags as one byte** (653281c, 2a5eac5): 20.5 s to
+  19.7 s; the second commit is neutral on ZEXALL and done for consistency.
+- **08:35, rung 3 launched** on 2a5eac5 from a worktree
+  (`/data/emu/z80-rust-fast-wt`), CPUs 10-31, 22 PyPy jobs, ZEXALL then
+  ZEXDOC, so the dispatch and flag changes are proven at the lockstep rung
+  while the build-profile work continues on the other cores.
