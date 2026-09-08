@@ -43,3 +43,17 @@ transcription this repository forks has its own record in
   22% of self time, the bench loop and its trap compares 21%, `step`'s
   lifecycle checks 11%, the memory index 8%, `note_fetched` 2%. The
   table is in the README.
+- **07:55 to 08:20, dispatch shape** (d27af51, 5814b1f). `execute_main`
+  and `execute_index_opcode` as exhaustive matches. ZEXALL 69.3 s to 43.0 s
+  on the first; the second moved only an IX loop (`bench/ix-loop.json`,
+  3.86 s to 2.99 s).
+- **08:20 to 09:05, the layout finding.** The ED dispatcher as a match
+  made its own loop 10% faster and ZEXALL 9% slower (43.2 s to 47.1 s).
+  The `step()` code was byte-identical in both binaries; it had moved
+  0x5e0 bytes because the ED function shrank. Aligning branch-target
+  blocks (`-C llvm-args=-align-all-nofallthru-blocks=5` or `=6`) brought
+  the two builds within 1-3% of each other in both directions; aligning
+  whole functions to 64 bytes did not. `scripts/bench.sh` now builds the
+  default and the two aligned layouts and reports the minimum, and the
+  three earlier commits were re-measured that way in a worktree so the
+  table is one measure throughout.
