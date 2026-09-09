@@ -99,3 +99,56 @@ transcription this repository forks has its own record in
 - **Open when this record was written:** the wasm project, which is next
   and not started. A tag is now permitted by the brief's rule (rung 3
   before any tag) and is the user's call.
+
+## 2026-09-08, second machine (Ryzen 7 9800X3D)
+
+Not part of the build: the same commit `85fb856` measured on a second
+machine, so the speed table can say which of its numbers are the core's
+and which are the i9's. The results and what they mean are in the README
+under "Speed"; what it took to get them is here.
+
+- **20:50, the checkout.** `git clone` on a Windows 11 box with a Ryzen 7
+  9800X3D (8 Zen 5 cores, 16 threads, one CCD). Neither Rust nor a linker
+  was installed, in Windows or in its WSL2 Ubuntu 24.04.
+- **20:59, the ZEX binaries.** Not bundled and not on the machine;
+  `zexall.com` and `zexdoc.com` fetched from `anotherlin/z80emu`'s
+  `testfiles/` and checked against the SHA-256 in `conformance/README.md`:
+  both exact, `6e2da551...8537e8` and `34923a7e...f2ae8f`.
+- **21:00 to 21:20, two toolchains.** WSL there has no outbound network
+  (DNS resolves, every connection times out), so rustup could not run and
+  cargo could not reach crates.io. Both toolchains were installed from the
+  `static.rust-lang.org` tarballs downloaded on the Windows side --
+  1.93.1, the compiler the i9 numbers were taken with, and 1.98.1, current
+  stable -- and the crates.io cache was seeded by copying the Windows
+  `~/.cargo/registry` in, with `CARGO_NET_OFFLINE=true`. `llvm-profdata`
+  for `scripts/pgo.sh` came the same way, from the `llvm-tools` component,
+  and needs `LD_LIBRARY_PATH` pointed at the toolchain's `lib` for its
+  `libLLVM`. On Windows there is no MSVC, so the native build is
+  `x86_64-pc-windows-gnu`, which rustup links without an external gcc.
+- **Two gotchas worth recording.** A clone made by Windows git has CRLF
+  line endings, and `scripts/*.sh` will not run in WSL (`bash
+: No such
+  file or directory`); cloning again from inside WSL gives an LF checkout
+  and a clean `git status`, which the bench line reports. And
+  `scripts/bench.sh` needs `taskset`, which Windows has no equivalent of
+  on the command line; `scripts/bench.ps1` is the port, pinning with
+  `start /affinity <hexmask>` so the mask is set before the process runs.
+- **21:10 to 21:30, the sweeps.** `scripts/bench.sh` unchanged, `RUNS=2`,
+  CPU 4, nothing else running: 16.28 s at rustc 1.93.1, 15.66 s at 1.98.1,
+  15.71 s Windows-native at 1.98.1, 14.53 s with PGO. Against the i9's
+  16.8 s and 15.1 s.
+- **The layout finding does not reproduce here.** The three layouts land
+  within 1.6-1.7% of each other and the winner changes between sweeps, so
+  on Zen 5 the 64-byte branch-target alignment that `.cargo/config.toml`
+  forces is worth nothing measurable and costs about 6% code size. It
+  stays the default: the i9 is the build machine and it is worth 4% there.
+- **PGO needed a second look.** `scripts/pgo.sh`'s own timed run, taken
+  immediately after the optimized build, read 15.75 s, which would have
+  said PGO does nothing on this machine. Three default/PGO pairs run
+  alternately afterwards read 14.53-14.60 s against 15.61-15.87 s. The
+  script's single run is the one to distrust; the record is 14.53 s.
+- **No rung was re-run.** The ladder still rests on the i9 runs. Every
+  bench run reproduced the exact instruction and T-state totals and
+  stopped on `cpm_exit`, which is a consistency check, not a rung; the
+  `fetch_*` scripts and the reference venv need the network WSL there
+  does not have.
