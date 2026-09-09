@@ -93,5 +93,9 @@ transcription this repository forks has its own record in
   CPUs 10-31 (the earlier runs took about 7 h with 30 unconfined
   processes; the segment diffs run at the same speed on the fast core
   because the reference side is the bottleneck). ZEXDOC started 13:10.
-- **Open when this record was written:** rung 3 ZEXDOC on 2a5eac5 and
-  the wasm project, which is next and not started.
+- **17:37, rung 3 ZEXDOC identical** at 2a5eac5: 116 segments, every one
+  identical, 4 h 27 min. The whole ladder passes on the fork: rungs 1, 2,
+  4, 5, 6 at c5f04b5 and rung 3 at 2a5eac5.
+- **Open when this record was written:** the wasm project, which is next
+  and not started. A tag is now permitted by the brief's rule (rung 3
+  before any tag) and is the user's call.

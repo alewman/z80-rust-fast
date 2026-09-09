@@ -18,7 +18,8 @@ Where it stands (2026-09-08): ZEXALL's 5,764,169,474 instructions in
 **16.8 s** with `cargo build --release` (344 M instructions/s, a 2.8 GHz
 Z80) and 15.1 s with the optional PGO build, from 69.3 s as forked on the
 same measure (60.1 s once code placement is controlled for). Every change
-is one commit with its measurement, in the table under "Speed".
+is one commit with its measurement, in the table under "Speed", and the
+whole six-rung ladder passes (table under "Certification").
 
 The library keeps the crate name `z80_rust`, so a host written for z80-rust
 (`use z80_rust::{Bus, Z80}`) compiles against this crate unchanged. The
@@ -45,7 +46,7 @@ Linux x86_64 (i9-13900K) with rustc 1.93.1, CPython 3.14.4 and PyPy 7.3.20:
 | --- | --- | --- | --- | --- |
 | 1 | The three example manifests diff clean against the reference | `traces are identical` x3 | `c5f04b5` and every commit before it | `rung1.sh` |
 | 2 | SingleStepTests, 1,604 files | `TOTAL: 1604000 passed, 0 failed, 0 not implemented / 1604000 cases` | `c5f04b5` and every commit before it | `rung2.sh` |
-| 3 | ZEXALL and ZEXDOC in lockstep against the reference, 116 segments of 50,000,000 records each | At `2a5eac5` (every source-level change; the two commits after it change only the build profile): **ZEXALL `every segment identical`**, 5,764,169,474 records and 46,734,975,782 T-states, stopped on `cpm_exit`, 4 h 34 min with 22 PyPy processes on CPUs 10-31 (2026-09-08 08:35 to 13:09). **ZEXDOC running**, started 13:10; recorded here when it finishes. At the fork point (z80-rust `43c5122`) both exercisers were identical | `rung3.sh` |
+| 3 | ZEXALL and ZEXDOC in lockstep against the reference, 116 segments of 50,000,000 records each | At `2a5eac5` (every source-level change; the two commits after it change only the build profile): `zexall: every segment identical` and `zexdoc: every segment identical`, 5,764,169,474 records and 46,734,975,782 T-states each, stopped on `cpm_exit`; 4 h 34 min and 4 h 27 min with 22 PyPy processes on CPUs 10-31 (2026-09-08). At the fork point (z80-rust `43c5122`) both were identical too | `rung3.sh` |
 | 4 | z80test natively: `z80full`, `z80ccf`, `z80memptr` | all three `Result: all tests passed.` | `c5f04b5` and every commit before it | `rung4.sh` |
 | 5 | The ten interrupt scenarios as manifests with events | all ten `traces are identical` | `c5f04b5` and every commit before it | `rung5.sh` |
 | 6 | FUSE 1.6.0's core test set, 1,356 cases, six explained divergences pinned | `1350 agree, 6 expected divergences, 0 unexpected` | `c5f04b5` and every commit before it | `rung6.sh` |
@@ -55,9 +56,10 @@ Rungs 1, 2, 4, 5, and 6 were re-run clean on every commit that touches
 before and after. Rung 3 is required before any tag and after any change
 to dispatch or the block instructions; the dispatch changes are in
 `d27af51`..`94bd13a`, the block instructions are untouched, and the run on
-`2a5eac5` covers them. Until ZEXDOC reports, the claim for this repository is "rungs 1, 2, 4,
-5, 6 at `c5f04b5`; rung 3 ZEXALL at `2a5eac5`, ZEXDOC at the fork point",
-not "the whole ladder". CI
+`2a5eac5` covers them. So the claim for this repository is: **the whole
+ladder passes**, rungs 1, 2, 4, 5, 6 at `c5f04b5` and rung 3 at `2a5eac5`,
+whose instruction core is the same source as `c5f04b5` built with a
+different profile. A change to `src/` after `2a5eac5` re-opens rung 3. CI
 (`.github/workflows/ci.yml`) reproduces rungs 1, 2, 5, and 6 on every push,
 builds the core without `std`, and runs `cargo fmt --check`, `cargo clippy
 -D warnings`, and `cargo test`.
