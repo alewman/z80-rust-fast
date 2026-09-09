@@ -19,7 +19,9 @@ Where it stands (2026-09-08): ZEXALL's 5,764,169,474 instructions in
 Z80) and 15.1 s with the optional PGO build, from 69.3 s as forked on the
 same measure (60.1 s once code placement is controlled for). Every change
 is one commit with its measurement, in the table under "Speed", and the
-whole six-rung ladder passes (table under "Certification").
+whole six-rung ladder passes (table under "Certification"). The same
+commit runs ZEXALL in 15.7 s, and 14.5 s with PGO, on a Ryzen 7 9800X3D;
+that machine has its own section under "Speed".
 
 The library keeps the crate name `z80_rust`, so a host written for z80-rust
 (`use z80_rust::{Bus, Z80}`) compiles against this crate unchanged. The
@@ -123,6 +125,56 @@ taken with those processes paused.
 | `6fb0786` | Build profile: `lto = "fat"`, `codegen-units = 1` | 17.9 s | 17.0 s (nf6; 17.8 nf5) | 338.8 |
 | `c5f04b5` | 64-byte branch-target alignment becomes the default build (`.cargo/config.toml`); sweep is now default / noalign / nf5 | 16.8 s | 16.8 s (default; 17.0 nf5, 17.5 noalign) | 343.8 |
 | (optional) | `scripts/pgo.sh`: profile-guided build trained on ZEXALL and the two loops, output under `target/pgo-use/` | 15.1 s | 15.1 s (one layout) | 382.8 |
+
+### A second machine: Ryzen 7 9800X3D
+
+Every number above is from the build machine (i9-13900K). The same commit
+`85fb856` was re-measured on a Ryzen 7 9800X3D on 2026-09-08 to separate
+what the core does from what that one machine does. Eight Zen 5 cores, no
+P/E split, so `CPU` picks a full core either way; Linux x86_64 under WSL2
+(Ubuntu 24.04), `scripts/bench.sh` unchanged, `RUNS=2`, CPU 4. Each figure
+is the minimum over the three layouts, as above:
+
+| Build | i9-13900K | 9800X3D |
+| --- | --- | --- |
+| `cargo build --release`, rustc 1.93.1 | 16.8 s | 16.28 s (354.1 M instructions/s) |
+| `cargo build --release`, rustc 1.98.1 | not measured | 15.66 s (368.2 M instructions/s) |
+| the same, Windows-native (`x86_64-pc-windows-gnu`, `scripts/bench.ps1`) | not applicable | 15.71 s (367.0 M instructions/s) |
+| `scripts/pgo.sh` | 15.1 s | 14.53 s (396.5 M instructions/s, a 3.22 GHz Z80) |
+
+Three things this says:
+
+1. **The layout sensitivity is a property of the build machine, not of the
+   core.** It is the reason `.cargo/config.toml` forces 64-byte
+   branch-target alignment and the reason every commit above is measured
+   under three layouts. On Zen 5 the spread across `default`, `noalign`
+   and `nf5` is 1.6% at rustc 1.93.1 and 1.7% at 1.98.1 -- run-to-run
+   noise -- and the winning layout is a different one in each sweep
+   (`noalign`, then `default`, then `nf5` on Windows). So the alignment
+   flag buys nothing measurable there, at about 6% code size; it stays the
+   default because the i9 is the build machine, where it is worth 4%.
+2. **The compiler moves this as much as the CPU does.** rustc 1.93.1 to
+   1.98.1 is 16.28 s to 15.66 s, 3.8%, against 3.1% for the CPU change
+   with the compiler held at 1.93.1. A cross-machine comparison that does
+   not pin rustc is not measuring the core.
+3. **WSL2 costs nothing on this loop.** Windows-native 15.71 s against
+   WSL 15.66 s, 0.3% apart, so the WSL figures stand as Linux figures.
+
+PGO is reported from interleaved runs, not from `scripts/pgo.sh`'s own
+timed run: that one, taken immediately after the optimized build, read
+15.75 s, and three default/PGO pairs run alternately afterwards put PGO at
+14.53-14.60 s against 15.61-15.87 s for the default build. The secondary
+workloads at this commit, rustc 1.98.1: `bench/ix-loop.json` 1.279 s
+(234.6 M instructions/s), `bench/ed-loop.json` 1.072 s (279.9 M
+instructions/s); the ix and ed figures in "Optimizations" below are from
+earlier commits on the i9 and are not comparable with these.
+
+No rung was reproduced on this machine, so the certification above is
+unchanged and still rests on the i9 runs. Every bench run there did
+reproduce the exact 5,764,169,474 instructions and 46,734,975,782 T-states
+and stop on `cpm_exit`, which says the core did the same work, but that is
+a consistency check and not a rung: WSL on that machine has no outbound
+network, so the `fetch_*` scripts and the reference venv cannot be built.
 
 ### Profile of the baseline
 
