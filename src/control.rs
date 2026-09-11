@@ -188,9 +188,9 @@ impl<B: Bus> Z80<B> {
         let value = u16::from(self.bus.read_byte(self.sp))
             | (u16::from(self.bus.read_byte(self.sp.wrapping_add(1))) << 8);
         let hl = self.hl();
-        self.bus.write_byte(self.sp, hl as u8);
         self.bus
             .write_byte(self.sp.wrapping_add(1), (hl >> 8) as u8);
+        self.bus.write_byte(self.sp, hl as u8);
         self.h = (value >> 8) as u8;
         self.l = value as u8;
         self.wz = value;
