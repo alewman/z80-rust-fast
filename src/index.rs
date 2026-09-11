@@ -329,9 +329,9 @@ impl<B: Bus> Z80<B> {
         let value = u16::from(self.bus.read_byte(self.sp))
             | (u16::from(self.bus.read_byte(self.sp.wrapping_add(1))) << 8);
         let index = self.get_index(prefix);
-        self.bus.write_byte(self.sp, index as u8);
         self.bus
             .write_byte(self.sp.wrapping_add(1), (index >> 8) as u8);
+        self.bus.write_byte(self.sp, index as u8);
         self.set_index(prefix, value);
         self.wz = value;
         self.update_q(false);
