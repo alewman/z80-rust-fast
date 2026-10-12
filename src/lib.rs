@@ -7,12 +7,14 @@
 //! `rotate`, `cpu`) needs nothing from `std`; `trace` and `conformance`
 //! implement the trace schema and the conformance kit (`docs/trace-schema.md`
 //! and `docs/conformance.md` in z80-python) and need the default `std`
-//! feature.
+//! feature. `timing` is `z80_python/timing.py`: where in an instruction each
+//! bus access falls, from the reference's table (`access_timing`, generated).
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
 extern crate alloc;
 
+mod access_timing;
 pub mod alu;
 pub mod blocks;
 #[cfg(feature = "std")]
@@ -28,6 +30,7 @@ pub mod io;
 pub mod loads;
 pub mod rotate;
 pub mod state;
+pub mod timing;
 #[cfg(feature = "std")]
 pub mod trace;
 

@@ -7,7 +7,7 @@ on:
 env:
   CARGO_TERM_COLOR: always
   VECTORS_REVISION: ebe1875d48f374bcfd4b505d8eb8ee751568b5f7
-  Z80_PYTHON_COMMIT: "cab1598"
+  Z80_PYTHON_COMMIT: "b62891b"
 
 jobs:
   build:
@@ -37,6 +37,8 @@ jobs:
       - run: scripts/rung1.sh external/z80-python
       - name: "rung 5: interrupt manifests"
         run: scripts/rung5.sh external/z80-python/.venv/bin/python
+      - name: "rung 7: access timing"
+        run: scripts/rung7.sh external/z80-python/.venv/bin/python
 
   rung2:
     name: "rung 2: SingleStepTests 1,604,000 cases"

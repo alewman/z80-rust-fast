@@ -99,6 +99,10 @@ pub struct Z80<B: Bus> {
     pub halted: bool,
     pub(crate) ei_delay: u8,
     pub ei_nmi_iff2_erratum: bool,
+    /// Opt-in CMOS behavior: the undocumented OUT (C),0 drives 0xFF instead of 0
+    /// (see io.rs and docs/undocumented-behavior.md in z80-python). Default
+    /// false: NMOS.
+    pub cmos_out_c_zero: bool,
     /// The host's lifecycle request lines, one bit each ([`LINE_RESET`],
     /// [`LINE_NMI`], [`LINE_INT`]), so `step()` tests all three with one
     /// load; `int_vector` is the byte the device supplied with INT.
@@ -151,6 +155,7 @@ impl<B: Bus> Z80<B> {
             halted: false,
             ei_delay: 0,
             ei_nmi_iff2_erratum: false,
+            cmos_out_c_zero: false,
             pending_lines: 0,
             int_vector: 0,
             fetched_len: 0,
@@ -274,6 +279,12 @@ impl<B: Bus> Z80<B> {
         );
         self.pc = 0;
         self.im = 0;
+        // "Clears the Program Counter and registers I and R" (Zilog UM0080,
+        // "RESET"); MAME 0.285's z80.cpp clears them too. A sound driver that
+        // reads R after a board-level reset sees this (Sonic 3's, on the Mega
+        // Drive, found by megadrive-python).
+        self.i = 0;
+        self.r = 0;
         self.iff1 = false;
         self.iff2 = false;
         self.halted = false;

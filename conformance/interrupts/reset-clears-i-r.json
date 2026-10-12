@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "name": "reset-clears-i-r",
+  "host": "flat",
+  "memory": [
+    {
+      "address": 0,
+      "data": "00000000"
+    }
+  ],
+  "initial": {
+    "sp": 65520,
+    "i": 64,
+    "r": 85,
+    "im": 2
+  },
+  "events": [
+    {
+      "at_step": 2,
+      "kind": "reset"
+    },
+    {
+      "at_step": 3,
+      "kind": "reset_clear"
+    }
+  ],
+  "stop": {
+    "max_steps": 5,
+    "on_halt": true
+  }
+}

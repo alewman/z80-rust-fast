@@ -11,6 +11,12 @@
 //! consumed, and `len(cycles)` against the T-states `step()` returned. The
 //! generator's `ei` and `p` keys are ignored, as the reference runner does.
 //!
+//! It also checks the core against the access-timing table (`timing`), as
+//! z80-python's tests/test_access_timing.py does, but on every case rather
+//! than one per shape: the kinds of the accesses `step()` makes are the
+//! table's for the bytes at PC, in order, and `(T-states, accesses made)` is
+//! one of the table's shapes.
+//!
 //! Prints one line per failing case (up to a cap per file) and the same
 //! FILES/TOTAL summary the reference gate prints. Exit status 0 only when
 //! every case in every file passed.
@@ -20,6 +26,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use serde::Deserialize;
+use z80_rust::timing::{instruction_timing, AccessKind};
 use z80_rust::{Bus, Fault, Z80};
 
 #[derive(Deserialize)]
@@ -69,18 +76,23 @@ struct VectorBus {
     port_input_next: usize,
     port_outputs: Vec<(u16, u8)>,
     port_errors: Vec<String>,
+    /// The kind of every access, in order, for the access-timing check.
+    kinds: Vec<AccessKind>,
 }
 
 impl Bus for VectorBus {
     fn read_byte(&mut self, addr: u16) -> u8 {
+        self.kinds.push(AccessKind::Read);
         self.memory[usize::from(addr)]
     }
 
     fn write_byte(&mut self, addr: u16, value: u8) {
+        self.kinds.push(AccessKind::Write);
         self.memory[usize::from(addr)] = value;
     }
 
     fn read_port(&mut self, addr: u16) -> u8 {
+        self.kinds.push(AccessKind::In);
         match self.port_inputs.get(self.port_input_next) {
             None => {
                 self.port_errors.push(format!(
@@ -102,6 +114,7 @@ impl Bus for VectorBus {
     }
 
     fn write_port(&mut self, addr: u16, value: u8) {
+        self.kinds.push(AccessKind::Out);
         self.port_outputs.push((addr, value));
     }
 }
@@ -117,6 +130,7 @@ fn setup_cpu(initial: &State, ports: &[(u16, u8, String)]) -> Z80<VectorBus> {
         port_input_next: 0,
         port_outputs: Vec::new(),
         port_errors: Vec::new(),
+        kinds: Vec::new(),
     };
     for &(addr, value) in &initial.ram {
         bus.memory[usize::from(addr)] = value;
@@ -152,6 +166,11 @@ fn setup_cpu(initial: &State, ports: &[(u16, u8, String)]) -> Z80<VectorBus> {
 fn run_case(case: &Case) -> Vec<String> {
     let mut cpu = setup_cpu(&case.initial, &case.ports);
     let mut diffs = Vec::new();
+    // The instruction's bytes, as a host peeks them at PC before step().
+    let peeked: Vec<u8> = (0..8u16)
+        .map(|offset| cpu.bus.memory[usize::from(cpu.pc.wrapping_add(offset))])
+        .collect();
+    let timing = instruction_timing(&peeked);
     let t_states = match cpu.step() {
         Ok(t_states) => t_states,
         Err(fault @ Fault::UnhandledIndexOpcode { .. })
@@ -226,6 +245,20 @@ fn run_case(case: &Case) -> Vec<String> {
         ));
     }
     diffs.append(&mut cpu.bus.port_errors);
+    let kinds = &cpu.bus.kinds;
+    if !timing.shapes.contains(&(t_states, kinds.len())) {
+        diffs.push(format!(
+            "access timing: ({t_states} T-states, {} accesses) is not one of the table's shapes {:?}",
+            kinds.len(),
+            timing.shapes
+        ));
+    }
+    let table_kinds: Vec<AccessKind> = timing.accesses.iter().map(|a| a.kind).collect();
+    if !table_kinds.starts_with(kinds) {
+        diffs.push(format!(
+            "access timing: accesses {kinds:?} are not the table's {table_kinds:?} in order"
+        ));
+    }
     if !case.cycles.is_empty() {
         let expected_t = case.cycles.len() as u32;
         if t_states != expected_t {
