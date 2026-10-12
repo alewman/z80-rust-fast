@@ -2,7 +2,7 @@
 # Check out the z80-python reference at the pinned commit and install it into
 # a virtual environment, so rung 1/3/5 diffs run against exactly that core.
 set -euo pipefail
-COMMIT=cab1598
+COMMIT=b62891b
 DEST=${1:-"$(dirname "$0")/../external/z80-python"}
 PYTHON=${PYTHON:-python3}
 if [ ! -d "$DEST/.git" ]; then

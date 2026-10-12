@@ -46,13 +46,22 @@ impl<B: Bus> Z80<B> {
         12
     }
 
-    /// OUT (C),r -- the undocumented OUT (C),0 form writes zero on NMOS parts.
+    /// OUT (C),r -- the undocumented OUT (C),0 form writes zero on NMOS parts,
+    /// 0xFF on CMOS parts when the host opts in with `cmos_out_c_zero`.
     pub(crate) fn op_out_c_r(&mut self, opcode: u8) -> u32 {
         let src = (opcode >> 3) & 0x07;
         let addr = self.bc();
-        // OUT (C),0: the undocumented (HL) slot has no register, NMOS parts drive 0
-        // (CMOS parts drive 0xFF; this core models NMOS, as the vectors do).
-        let value = if src == 6 { 0 } else { self.read_reg(src) };
+        // OUT (C),0: the undocumented (HL) slot has no register. NMOS parts drive 0
+        // (Young 3.4: "ED71 simply outs the value 0"), as the vectors do. CMOS parts
+        // drive 0xFF when a host opts in with cmos_out_c_zero: reported, not
+        // hardware-captured here (sverx's SMS Test Suite tells a CMOS Game Gear
+        // from an NMOS Master System by this instruction; SMS Power forum 17116).
+        let slot_zero = if self.cmos_out_c_zero { 0xFF } else { 0 };
+        let value = if src == 6 {
+            slot_zero
+        } else {
+            self.read_reg(src)
+        };
         self.bus.write_port(addr, value);
         self.wz = addr.wrapping_add(1);
         self.update_q(false);

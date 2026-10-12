@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "name": "ei-ei-rearms-delay",
+  "host": "flat",
+  "memory": [
+    {
+      "address": 0,
+      "data": "fbfb000000"
+    }
+  ],
+  "initial": {
+    "sp": 65520,
+    "iff1": false,
+    "iff2": false,
+    "im": 1
+  },
+  "events": [
+    {
+      "at_step": 1,
+      "kind": "int",
+      "vector": 255
+    }
+  ],
+  "stop": {
+    "max_steps": 5,
+    "on_halt": true
+  }
+}

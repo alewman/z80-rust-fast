@@ -29,13 +29,22 @@ The library keeps the crate name `z80_rust`, so a host written for z80-rust
 lifecycle requests, and `Fault` are the frozen surface; so are the trace
 producer, the manifests, and the rung scripts.
 
+**Merged with z80-rust at z80-python `b62891b` (2026-10-12).** z80-rust's
+repin (the EI delay fix, RESET clearing I and R, the opt-in CMOS
+`OUT (C),0`, and `timing::instruction_timing` with its generated table, which
+the Mega Drive board uses to arbitrate the Z80's bus) was merged into this
+fork as one merge commit. Rungs 1, 2, 4, 5, 6 and 7 pass on it; rung 3 was
+re-run on it (see "Certification"). The speed numbers below were measured
+before the merge, which touches no hot path except one comparison in
+`step()`.
+
 ## Certification
 
 Pinned oracles, as `docs/conformance.md` in z80-python requires:
 
 | What | Version |
 | --- | --- |
-| z80-python (reference core and conformance kit) | 0.4.0.dev0 at commit `cab1598` (the local checkout is `d1ec9c7`, whose instruction core is byte-identical: only `conformance.py` and `trace.py` differ) |
+| z80-python (reference core and conformance kit) | main at commit `b62891b` (after 0.4.0: the EI delay fix, RESET clearing I and R, the opt-in CMOS `OUT (C),0`, and the access-timing table; the commit megadrive-python pins). Earlier pins: `cab1598`, `530cad3` |
 | Trace schema | version 1 |
 | SingleStepTests/z80 corpus | revision `ebe1875d48f374bcfd4b505d8eb8ee751568b5f7` |
 | raxoft/z80test | release 1.2a |
@@ -46,30 +55,24 @@ Linux x86_64 (i9-13900K) with rustc 1.93.1, CPython 3.14.4 and PyPy 7.3.20:
 
 | Rung | What | Result | Last run at | Script |
 | --- | --- | --- | --- | --- |
-| 1 | The three example manifests diff clean against the reference | `traces are identical` x3 | `c5f04b5` and every commit before it | `rung1.sh` |
-| 2 | SingleStepTests, 1,604 files | `TOTAL: 1604000 passed, 0 failed, 0 not implemented / 1604000 cases` | `c5f04b5` and every commit before it | `rung2.sh` |
-| 3 | ZEXALL and ZEXDOC in lockstep against the reference, 116 segments of 50,000,000 records each | At `2a5eac5` (every source-level change; the two commits after it change only the build profile): `zexall: every segment identical` and `zexdoc: every segment identical`, 5,764,169,474 records and 46,734,975,782 T-states each, stopped on `cpm_exit`; 4 h 34 min and 4 h 27 min with 22 PyPy processes on CPUs 10-31 (2026-09-08). At the fork point (z80-rust `43c5122`) both were identical too | `rung3.sh` |
-| 4 | z80test natively: `z80full`, `z80ccf`, `z80memptr` | all three `Result: all tests passed.` | `c5f04b5` and every commit before it | `rung4.sh` |
-| 5 | The ten interrupt scenarios as manifests with events | all ten `traces are identical` | `c5f04b5` and every commit before it | `rung5.sh` |
-| 6 | FUSE 1.6.0's core test set, 1,356 cases, six explained divergences pinned | `1350 agree, 6 expected divergences, 0 unexpected` | `c5f04b5` and every commit before it | `rung6.sh` |
+| 1 | The three example manifests diff clean against the reference | `traces are identical` x3 | the `b62891b` merge | `rung1.sh` |
+| 2 | SingleStepTests, 1,604 files: registers, RAM, port order, T-states, and on every case the kinds and order of the accesses `step()` makes against the access-timing table | `TOTAL: 1604000 passed, 0 failed, 0 not implemented / 1604000 cases` | the `b62891b` merge | `rung2.sh` |
+| 3 | ZEXALL and ZEXDOC in lockstep against the reference, 116 segments of 50,000,000 records each | Re-opened by the merge and running on it (started 2026-10-12, 16 PyPy processes). Before the merge, at `2a5eac5`: `zexall: every segment identical` and `zexdoc: every segment identical`, 5,764,169,474 records each | `2a5eac5`; the merge: running | `rung3.sh` |
+| 4 | z80test natively: `z80full`, `z80ccf`, `z80memptr` | all three `Result: all tests passed.` | the `b62891b` merge | `rung4.sh` |
+| 5 | The ten interrupt scenarios as manifests with events, plus three for the behaviour `b62891b` changed: `ei-ei-rearms-delay`, `ei-di-leaves-delay-zero`, `reset-clears-i-r` | all thirteen `traces are identical` | the `b62891b` merge | `rung5.sh` |
+| 6 | FUSE 1.6.0's core test set, 1,356 cases, six explained divergences pinned | `1350 agree, 6 expected divergences, 0 unexpected` | the `b62891b` merge | `rung6.sh` |
+| 7 | `timing::instruction_timing` answers as the reference's does, for every form the lookup distinguishes | `instruction_timing: 6180 forms, every answer identical` | the `b62891b` merge | `rung7.sh` |
 
-Rungs 1, 2, 4, 5, and 6 were re-run clean on every commit that touches
-`src/` or the build profile; each commit message carries the bench number
-before and after. Rung 3 is required before any tag and after any change
-to dispatch or the block instructions; the dispatch changes are in
-`d27af51`..`94bd13a`, the block instructions are untouched, and the run on
-`2a5eac5` covers them. So the claim for this repository is: **the whole
-ladder passes**, rungs 1, 2, 4, 5, 6 at `c5f04b5` and rung 3 at `2a5eac5`,
-whose instruction core is the same source as `c5f04b5` built with a
-different profile. A change to `src/` after `2a5eac5` re-opens rung 3. CI
-(`.github/workflows/ci.yml`) reproduces rungs 1, 2, 5, and 6 on every push,
-builds the core without `std`, and runs `cargo fmt --check`, `cargo clippy
--D warnings`, and `cargo test`.
+Before the merge, rungs 1, 2, 4, 5 and 6 were re-run clean on every commit
+that touched `src/` or the build profile, and rung 3 passed at `2a5eac5` (every
+source-level optimization) and at the fork point. CI
+(`.github/workflows/ci.yml`) reproduces rungs 1, 2, 5, 6 and 7 on every push,
+plus `cargo fmt --check`, `cargo clippy -D warnings`, and `cargo test`.
 
 ### Reproducing
 
 ```text
-scripts/fetch_z80python.sh           # z80-python at cab1598 into external/, with a venv
+scripts/fetch_z80python.sh           # z80-python at b62891b into external/, with a venv
 scripts/fetch_test_vectors.sh        # SingleStepTests/z80 at the pinned revision into external/
 scripts/rung1.sh
 scripts/rung2.sh
@@ -82,6 +85,7 @@ scripts/fetch_fuse_tests.sh            # FUSE 1.6.0 z80/tests into external/
 scripts/rung6.sh
 scripts/bench.sh                       # the speed number, pinned to one core
 target/release/z80-bench bench/ix-loop.json   # secondary workloads, see bench/README.md
+scripts/rung7.sh
 ```
 
 ## Speed
@@ -371,7 +375,79 @@ Inherited from the reference and z80-rust, unchanged:
   an error for a non-RST byte and leave the request pending; no oracle in
   the ladder exercises it, and supporting it changes the trace schema.
 - Bus-level timing, memory contention, WAIT states, interrupt-acknowledge
-  callbacks, and daisy chains are outside every core's claims.
+  callbacks, and daisy chains are outside both cores' claims, as
+  `docs/conformance.md` in the reference says. `step()` does not count
+  T-states as it goes; where in an instruction each access falls is
+  answered beside the core, from a table (below).
+
+## Access timing
+
+`timing::instruction_timing(bytes)` takes an instruction's bytes, as a host
+peeks them at PC before `step()`, and returns every memory and I/O access
+the instruction can make, in order, each with its T-state offset, plus each
+way it can execute (`(t_states, accesses_made)`). It is for boards that
+arbitrate a shared bus, such as the Mega Drive's. It transcribes
+`z80_python/timing.py`; the table (`src/access_timing.rs`) is generated from
+the reference's by `scripts/gen_access_timing.py`, and the reference derives
+it from the SingleStepTests corpus's per-T-state bus samples, so its tier is
+emulator-derived. Interrupt acknowledge cycles and the HALT idle cycle are
+not covered.
+
+The behaviour fixes at `b62891b`, each from the reference:
+
+- **EI re-arms the delay** ([z80-python#18](https://github.com/alewman/z80-python/pull/18)):
+  the delay ends as the instruction after EI starts, so `EI; EI` takes a
+  pending interrupt only after the next instruction (Young 5.5), and
+  `EI; DI` leaves `ei_delay` 0 rather than the -1 the reference's
+  `CPUState` rejects.
+- **RESET clears I and R** (Zilog UM0080, "RESET"; found by megadrive-python,
+  whose Sonic 3 sound driver reads R after a board reset).
+- **`Z80::cmos_out_c_zero`** (default `false`): the undocumented
+  `OUT (C),0` drives 0xFF, as CMOS parts such as the Game Gear's are
+  reported to. Reported, not hardware-captured.
+
+The rest of `cab1598..b62891b` is internal to the reference (the callable
+bus, the speed rungs' one-table dispatch and collapsed IX/IY handlers,
+tooling, documentation) and changes no behaviour; this port keeps its
+explicit if-chain dispatch and handler names, which still read side by side
+with the reference's rules and citations.
+
+Binaries:
+
+- `z80-trace <manifest>`: run a conformance manifest and stream its trace
+  (`docs/trace-schema.md`) to stdout or `--out`.
+- `z80-vectors <dir>`: the SingleStepTests runner.
+- `z80-z80test <tap>...`: the z80test runner.
+- `z80-timing`: reads instruction bytes in hex on stdin and prints
+  `instruction_timing` for each (rung 7).
+- `z80-fuse <dir>`: the FUSE core-test runner (rung 6). FUSE's expectations
+  are emulator-derived; six cases disagree with the hardware-derived
+  oracles, for reasons z80-python's `docs/validation.md` records, and the
+  runner requires exactly those six to diverge.
+
+## Prefix runs
+
+At `cab1598` the reference gained hardware-faithful handling of runs of
+DD/FD prefixes and of DD/FD before ED ([z80-python#5](https://github.com/alewman/z80-python/pull/5):
+each stray prefix is a 4-T-state M1 that bumps R, the last one decides IX or
+IY, an ED after a prefix runs the ED instruction unchanged, and no interrupt
+is accepted inside the run). `src/index_dispatch.rs` transcribes it, and the
+bytes an instruction occupies are now unbounded, since the run is. The rule
+is documentation-derived (Sean Young, *The Undocumented Z80 Documented*
+v0.91, sections 3.7 and 6.1, chapter 5) and has no hardware-captured vector;
+z80-python's `docs/validation.md` states that tier, and this port inherits
+it. `Fault::UnhandledIndexOpcode` is now unreachable and kept only as the
+table's completeness guard.
+
+## Notes for the reference
+
+Three things this port turned up went upstream and are merged:
+[z80-python#3](https://github.com/alewman/z80-python/pull/3) (`CPUState` has
+28 fields where the docs said 29, and the interrupt-scenario manifests in
+`conformance/interrupts/` shipped as `examples/conformance/interrupts/` with
+their reference traces), [#4](https://github.com/alewman/z80-python/pull/4)
+(the reference's CI workflow had failed to parse since before this work), and
+[#5](https://github.com/alewman/z80-python/pull/5) (prefix runs, above).
 
 ## Where the brief is
 
