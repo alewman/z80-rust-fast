@@ -33,8 +33,8 @@ producer, the manifests, and the rung scripts.
 repin (the EI delay fix, RESET clearing I and R, the opt-in CMOS
 `OUT (C),0`, and `timing::instruction_timing` with its generated table, which
 the Mega Drive board uses to arbitrate the Z80's bus) was merged into this
-fork as one merge commit. Rungs 1, 2, 4, 5, 6 and 7 pass on it; rung 3 was
-re-run on it (see "Certification"). The speed numbers below were measured
+fork as one merge commit. All seven rungs pass on it, rung 3 included (see
+"Certification"). The speed numbers below were measured
 before the merge, which touches no hot path except one comparison in
 `step()`.
 
@@ -57,7 +57,7 @@ Linux x86_64 (i9-13900K) with rustc 1.93.1, CPython 3.14.4 and PyPy 7.3.20:
 | --- | --- | --- | --- | --- |
 | 1 | The three example manifests diff clean against the reference | `traces are identical` x3 | the `b62891b` merge | `rung1.sh` |
 | 2 | SingleStepTests, 1,604 files: registers, RAM, port order, T-states, and on every case the kinds and order of the accesses `step()` makes against the access-timing table | `TOTAL: 1604000 passed, 0 failed, 0 not implemented / 1604000 cases` | the `b62891b` merge | `rung2.sh` |
-| 3 | ZEXALL and ZEXDOC in lockstep against the reference, 116 segments of 50,000,000 records each | Re-opened by the merge and running on it (started 2026-10-12, 16 PyPy processes). Before the merge, at `2a5eac5`: `zexall: every segment identical` and `zexdoc: every segment identical`, 5,764,169,474 records each | `2a5eac5`; the merge: running | `rung3.sh` |
+| 3 | ZEXALL and ZEXDOC in lockstep against the reference, 116 segments of 50,000,000 records each | `zexall: every segment identical` and `zexdoc: every segment identical`, 5,764,169,474 records each, at the merge (2026-10-13) and before it at `2a5eac5` | the `b62891b` merge | `rung3.sh` |
 | 4 | z80test natively: `z80full`, `z80ccf`, `z80memptr` | all three `Result: all tests passed.` | the `b62891b` merge | `rung4.sh` |
 | 5 | The ten interrupt scenarios as manifests with events, plus three for the behaviour `b62891b` changed: `ei-ei-rearms-delay`, `ei-di-leaves-delay-zero`, `reset-clears-i-r` | all thirteen `traces are identical` | the `b62891b` merge | `rung5.sh` |
 | 6 | FUSE 1.6.0's core test set, 1,356 cases, six explained divergences pinned | `1350 agree, 6 expected divergences, 0 unexpected` | the `b62891b` merge | `rung6.sh` |
