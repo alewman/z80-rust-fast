@@ -44,11 +44,19 @@ Pinned oracles, as `docs/conformance.md` in z80-python requires:
 
 | What | Version |
 | --- | --- |
-| z80-python (reference core and conformance kit) | main at commit `b62891b` (after 0.4.0: the EI delay fix, RESET clearing I and R, the opt-in CMOS `OUT (C),0`, and the access-timing table; the commit megadrive-python pins). Earlier pins: `cab1598`, `530cad3` |
+| z80-python (reference core and conformance kit) | main at commit `b59c80b`, which was `b62891b` before z80-python's history rewrite (after 0.4.0: the EI delay fix, RESET clearing I and R, the opt-in CMOS `OUT (C),0`, and the access-timing table; the commit megadrive-python pins). Earlier pins: `cab1598`, `530cad3` (now `73dd7ab`, `6c8d0db`) |
 | Trace schema | version 1 |
 | SingleStepTests/z80 corpus | revision `ebe1875d48f374bcfd4b505d8eb8ee751568b5f7` |
 | raxoft/z80test | release 1.2a |
 | FUSE Z80 core tests | release 1.6.0 (`fuse-1.6.0.tar.gz`, SHA-256 `3a8fedf2…047096`) |
+
+**History rewrite (2026-11-19).** z80-python's history was rewritten to drop GPL test
+data and a document that named the author; this repository's and z80-rust's were
+rewritten for the author name only. Every hash changed and no tree did, so every result
+below still holds. Hashes in this README and in `docs/` written before then are the old
+ones: z80-python `b62891b` is now `b59c80b`; this repository's `c24701d` (the
+megadrive-rust-fast pin) is now `6c53d14`, `5015d98` (the galaga pin) is now `4c369cc`, and tag `v0.1.0` was recreated on the
+rewritten commit.
 
 Ladder status, each rung reproduced with the script named (`scripts/`) on
 Linux x86_64 (i9-13900K) with rustc 1.93.1, CPython 3.14.4 and PyPy 7.3.20:

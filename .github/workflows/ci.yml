@@ -7,7 +7,7 @@ on:
 env:
   CARGO_TERM_COLOR: always
   VECTORS_REVISION: ebe1875d48f374bcfd4b505d8eb8ee751568b5f7
-  Z80_PYTHON_COMMIT: "b62891b"
+  Z80_PYTHON_COMMIT: "b59c80b"
 
 jobs:
   build:
